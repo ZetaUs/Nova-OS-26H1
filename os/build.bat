@@ -71,7 +71,7 @@ for %%F in ("%OUT%\kernel.bin") do if %%~zF GTR 32768 (
 )
 
 echo [7/7] Creating the 64 MiB BIOS disk image...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$boot=[System.IO.File]::ReadAllBytes('%OUT%\boot.bin'); $stage2=[System.IO.File]::ReadAllBytes('%OUT%\stage2.bin'); $kernel=[System.IO.File]::ReadAllBytes('%OUT%\kernel.bin'); $img=New-Object byte[] (64*1024*1024); $boot.CopyTo($img,0); $stage2.CopyTo($img,512); $kernel.CopyTo($img,9*512); [System.IO.File]::WriteAllBytes('%OUT%\nova-os.img',$img)"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { $boot=[System.IO.File]::ReadAllBytes('%OUT%\boot.bin'); $stage2=[System.IO.File]::ReadAllBytes('%OUT%\stage2.bin'); $kernel=[System.IO.File]::ReadAllBytes('%OUT%\kernel.bin'); $img=New-Object byte[] (64*1024*1024); $boot.CopyTo($img,0); $stage2.CopyTo($img,512); $kernel.CopyTo($img,9*512); [System.IO.File]::WriteAllBytes('%OUT%\nova-os-26h2.img',$img) } catch { Write-Error $_; exit 1 }"
 if errorlevel 1 exit /b 1
 
-echo Built 64-bit Nova OS 26H1: %OUT%\nova-os.img
+echo Built 64-bit Nova OS 26H2: %OUT%\nova-os-26h2.img

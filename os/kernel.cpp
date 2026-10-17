@@ -2,6 +2,7 @@ typedef unsigned char uint8_t;
 typedef signed char int8_t;
 typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
+typedef unsigned long long uintptr_t;
 
 static void put_pixel(int x, int y, uint32_t color);
 static void pixel(uint16_t x, uint16_t y, uint8_t color);
@@ -10,6 +11,7 @@ static void pixel(uint16_t x, uint16_t y, uint8_t color);
 #include "chinese_font.h"
 
 static volatile uint32_t* framebuffer;
+static volatile uint32_t* render_target;
 static uint32_t screen_width;
 static uint32_t screen_height;
 static uint32_t screen_pitch;
@@ -22,6 +24,7 @@ static uint8_t mouse_buttons;
 static bool mouse_cursor_drawn;
 static bool keyboard_extended;
 static uint32_t mouse_cursor_background[32 * 40];
+static const uintptr_t backbuffer_address = 0x01000000;
 
 static const uint16_t mouse_cursor_outline[20] = {
     0xE000, 0xF000, 0xF800, 0x9E00, 0x8F00,
@@ -91,7 +94,7 @@ static void fill_rect(int x, int y, int width, int height, uint32_t color) {
     int right = x + width > static_cast<int>(screen_width) ? static_cast<int>(screen_width) : x + width;
     int bottom = y + height > static_cast<int>(screen_height) ? static_cast<int>(screen_height) : y + height;
     for (int row = top; row < bottom; ++row) {
-        volatile uint32_t* line = framebuffer + static_cast<uint32_t>(row) * (screen_pitch / 4) + left;
+        volatile uint32_t* line = render_target + static_cast<uint32_t>(row) * (screen_pitch / 4) + left;
         for (int column = left; column < right; ++column) *line++ = color;
     }
 }
@@ -242,7 +245,7 @@ static void draw_nova_mark(int x, int y) {
 static void draw_wallpaper() {
     for (uint32_t y = 0; y < screen_height; ++y) {
         const uint32_t color = mix_color(0x07172A, 0x102F50, y, screen_height);
-        volatile uint32_t* row = framebuffer + y * (screen_pitch / 4);
+        volatile uint32_t* row = render_target + y * (screen_pitch / 4);
         for (uint32_t x = 0; x < screen_width; ++x) row[x] = color;
     }
     draw_triangle(930, 120, 2490, 180, 1880, 1310, 0x0B2947);
@@ -255,42 +258,66 @@ static void draw_wallpaper() {
     fill_rect(mark_x - 38, mark_y - 38, 556, 556, 0x123D62);
     fill_rect(mark_x - 31, mark_y - 31, 542, 542, 0x0C2C4A);
     draw_logo(mark_x, mark_y, 6);
-    draw_text("星云操作系统", mark_x - 14, mark_y + 540, 2, 0xFFFFFF);
-    draw_text("2026 上半年版", mark_x + 48, mark_y + 595, 1, 0x92CFF2);
+    draw_text("Nova", mark_x - 14, mark_y + 540, 4, 0xFFFFFF);
+    draw_text("2026 下半年版", mark_x + 48, mark_y + 595, 1, 0x92CFF2);
 }
 
 static void draw_start_menu() {
     fill_rect(24, static_cast<int>(screen_height) - 618, 570, 530, 0xE8142942);
     fill_rect(24, static_cast<int>(screen_height) - 618, 6, 530, 0x36BDF0);
     draw_text("开始菜单", 62, static_cast<int>(screen_height) - 574, 1, 0xFFFFFF);
-    draw_text("星云操作系统 26H1", 62, static_cast<int>(screen_height) - 536, 1, 0x75D8FF);
+    draw_text("Nova 26H2", 62, static_cast<int>(screen_height) - 536, 1, 0x75D8FF);
     draw_app_icon(66, static_cast<int>(screen_height) - 454, false);
-    draw_text("此电脑", 160, static_cast<int>(screen_height) - 431, 1, 0xFFFFFF);
+    draw_text("此电脑", 148, static_cast<int>(screen_height) - 431, 1, 0xFFFFFF);
     draw_app_icon(66, static_cast<int>(screen_height) - 350, true);
-    draw_text("文件管理", 160, static_cast<int>(screen_height) - 329, 1, 0xFFFFFF);
+    draw_text("文件管理", 142, static_cast<int>(screen_height) - 329, 1, 0xFFFFFF);
+
+    const int restart_y = static_cast<int>(screen_height) - 264;
+    const int shutdown_y = static_cast<int>(screen_height) - 204;
+    fill_rect(52, restart_y, 510, 52, 0x182F4A);
+    fill_rect(68, restart_y + 8, 36, 36, 0x14577A);
+    draw_text("重启", 120, restart_y + 14, 1, 0xFFFFFF);
+    fill_rect(52, shutdown_y, 510, 52, 0x182F4A);
+    fill_rect(68, shutdown_y + 8, 36, 36, 0x673844);
+    draw_text("关机", 120, shutdown_y + 14, 1, 0xFFFFFF);
+
     fill_rect(52, static_cast<int>(screen_height) - 120, 510, 1, 0x38536F);
     draw_text("按Win键开关菜单", 62, static_cast<int>(screen_height) - 117, 1, 0x9BB1C8);
 }
 
+static void present_backbuffer() {
+    const uint32_t pixels_per_row = screen_width;
+    const uint32_t row_stride = screen_pitch / 4;
+    for (uint32_t y = 0; y < screen_height; ++y) {
+        volatile uint32_t* destination = framebuffer + y * row_stride;
+        volatile uint32_t* source = render_target + y * row_stride;
+        for (uint32_t x = 0; x < pixels_per_row; ++x) {
+            destination[x] = source[x];
+        }
+    }
+}
+
 static void draw_desktop() {
+    render_target = reinterpret_cast<volatile uint32_t*>(backbuffer_address);
     draw_wallpaper();
 
     draw_app_icon(54, 62, false);
     draw_text("此电脑", 54, 143, 1, 0xFFFFFF);
     draw_app_icon(54, 218, true);
-    draw_text("文件管理", 54, 299, 1, 0xFFFFFF);
+    draw_text("文件管理", 42, 299, 1, 0xFFFFFF);
 
     fill_rect(0, static_cast<int>(screen_height) - 76, static_cast<int>(screen_width), 76, 0xE8102033);
     fill_rect(0, static_cast<int>(screen_height) - 76, static_cast<int>(screen_width), 1, 0x31506C);
     fill_rect(22, static_cast<int>(screen_height) - 64, 52, 52, start_menu_open ? 0x15527A : 0x102B45);
     draw_nova_mark(26, static_cast<int>(screen_height) - 60);
     fill_rect(92, static_cast<int>(screen_height) - 58, 1, 40, 0x38516A);
-    draw_text("星云系统", 116, static_cast<int>(screen_height) - 50, 1, 0xFFFFFF);
+    draw_text("Nova", 116, static_cast<int>(screen_height) - 50, 1, 0xFFFFFF);
     draw_text("64位", static_cast<int>(screen_width) - 220, static_cast<int>(screen_height) - 50, 1, 0xA8C4DB);
     fill_rect(static_cast<int>(screen_width) - 120, static_cast<int>(screen_height) - 52, 1, 30, 0x38516A);
-    draw_text("26H1版", static_cast<int>(screen_width) - 106, static_cast<int>(screen_height) - 50, 1, 0x75D8FF);
+    draw_text("26H2版", static_cast<int>(screen_width) - 106, static_cast<int>(screen_height) - 50, 1, 0x75D8FF);
 
     if (start_menu_open) draw_start_menu();
+    present_backbuffer();
 }
 
 static uint8_t in8(uint16_t port) {
@@ -301,6 +328,63 @@ static uint8_t in8(uint16_t port) {
 
 static void out8(uint16_t port, uint8_t value) {
     __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static void out16(uint16_t port, uint16_t value) {
+    __asm__ volatile("outw %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static uint16_t pit_read_count() {
+    out8(0x43, 0);
+    const uint16_t low = in8(0x40);
+    const uint16_t high = in8(0x40);
+    return low | (high << 8);
+}
+
+static void wait_pit_ticks(uint32_t ticks) {
+    uint16_t previous = pit_read_count();
+    while (ticks != 0) {
+        const uint16_t current = pit_read_count();
+        if (current > previous) --ticks;
+        previous = current;
+        __asm__ volatile("pause");
+    }
+}
+
+static void draw_loading_screen() {
+    render_target = reinterpret_cast<volatile uint32_t*>(backbuffer_address);
+    fill_rect(0, 0, static_cast<int>(screen_width), static_cast<int>(screen_height), 0x07172A);
+
+    const int center_x = static_cast<int>(screen_width / 2);
+    const int center_y = static_cast<int>(screen_height / 2);
+    draw_logo(center_x - 160, center_y - 230, 4);
+    draw_text("Nova", center_x - 108, center_y + 110, 3, 0xFFFFFF);
+    draw_text("2026 下半年版", center_x - 132, center_y + 182, 1, 0x92CFF2);
+    draw_text("正在启动", center_x - 96, center_y + 226, 1, 0xCBD5E1);
+
+    const int progress_x = center_x - 180;
+    const int progress_y = center_y + 270;
+    fill_rect(progress_x, progress_y, 360, 8, 0x31506C);
+    fill_rect(progress_x + 2, progress_y + 2, 356, 4, 0x102B45);
+    present_backbuffer();
+
+    for (int progress = 0; progress <= 100; progress += 5) {
+        fill_rect(progress_x + 2, progress_y + 2, progress * 356 / 100, 4, 0x36BDF0);
+        present_backbuffer();
+        wait_pit_ticks(1);
+    }
+}
+
+static __attribute__((noreturn)) void restart_system() {
+    while ((in8(0x64) & 2) != 0) __asm__ volatile("pause");
+    out8(0x64, 0xFE);
+    for (;;) __asm__ volatile("cli; hlt");
+}
+
+static __attribute__((noreturn)) void shutdown_system() {
+    out16(0x0604, 0x2000);
+    out16(0xB004, 0x2000);
+    for (;;) __asm__ volatile("cli; hlt");
 }
 
 static bool wait_mouse_input_ready() {
@@ -396,10 +480,23 @@ static void handle_mouse_packet() {
                -static_cast<int8_t>(mouse_packet[2]));
 
     const uint8_t buttons = flags & 7;
-    if ((buttons & 1) != 0 && (mouse_buttons & 1) == 0 &&
-        mouse_x < 84 && mouse_y >= static_cast<int>(screen_height) - 76) {
-        start_menu_open = !start_menu_open;
-        draw_desktop();
+    if ((buttons & 1) != 0 && (mouse_buttons & 1) == 0) {
+        const int screen_bottom = static_cast<int>(screen_height);
+        if (start_menu_open && mouse_x >= 52 && mouse_x < 562 &&
+            mouse_y >= screen_bottom - 264 && mouse_y < screen_bottom - 212) {
+            restart_system();
+        } else if (start_menu_open && mouse_x >= 52 && mouse_x < 562 &&
+                   mouse_y >= screen_bottom - 204 && mouse_y < screen_bottom - 152) {
+            shutdown_system();
+        } else if (mouse_x < 84 && mouse_y >= screen_bottom - 76) {
+            start_menu_open = !start_menu_open;
+            draw_desktop();
+        } else if (start_menu_open &&
+                   (mouse_x < 24 || mouse_x >= 594 ||
+                    mouse_y < screen_bottom - 618 || mouse_y >= screen_bottom - 88)) {
+            start_menu_open = false;
+            draw_desktop();
+        }
     }
     mouse_buttons = buttons;
     draw_mouse_cursor();
@@ -421,6 +518,7 @@ extern "C" __attribute__((noreturn)) void kernel_main(
     screen_width = width;
     screen_height = height;
     screen_pitch = pitch;
+    render_target = reinterpret_cast<volatile uint32_t*>(backbuffer_address);
     start_menu_open = false;
     mouse_x = static_cast<int>(screen_width / 2);
     mouse_y = static_cast<int>(screen_height / 2);
@@ -428,6 +526,7 @@ extern "C" __attribute__((noreturn)) void kernel_main(
     mouse_buttons = 0;
     mouse_cursor_drawn = false;
     keyboard_extended = false;
+    draw_loading_screen();
     draw_desktop();
     initialize_mouse();
     draw_mouse_cursor();

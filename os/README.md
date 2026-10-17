@@ -12,7 +12,7 @@ From the workspace root, run:
 
 The build uses the Dev-C++ MinGW-w64 compiler (`-m64`), the bundled NASM assembler, and Python 3 to embed the Chinese glyphs used by the desktop and menu. It produces `os\build\nova-os-26h2.img` so that an older running QEMU instance can keep using the previous disk image. If Dev-C++ is installed elsewhere, set `DEVCPP_HOME` to its installation directory before building.
 
-The BIOS loader requests a VBE linear framebuffer, enables the QEMU/Bochs VBE 2560x1440x32 mode, builds identity-mapped 2 MiB page tables for the first 4 GiB, and enters x86-64 long mode. The kernel and framebuffer are identity mapped. The kernel is deliberately freestanding and does not depend on a hosted C++ runtime.
+The BIOS loader requests a VBE linear framebuffer, enables the QEMU/Bochs VBE 2560x1440x32 mode, builds identity-mapped 2 MiB page tables for the first 4 GiB, and enters x86-64 long mode. Desktop and loading frames are drawn to a back buffer before being presented, preventing partially rendered screen transitions. The kernel is deliberately freestanding and does not depend on a hosted C++ runtime.
 
 ## Run
 

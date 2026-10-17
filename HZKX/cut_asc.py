@@ -54,7 +54,13 @@ def main():
     with open(BIN_OUT, "wb") as fw:
         fw.write(bin_data)
 
-    # 写出 C 头文件 asc48_map.h
+    # ========== 改动重点：ASCII 0~127 查表数组，O(1)查找 ==========
+    # 初始化全部为 -1
+    ascii_lookup = [-1] * 128
+    for idx, ch in enumerate(char_list):
+        code = ord(ch)
+        ascii_lookup[code] = idx
+
     h_lines = []
     h_lines.append("#ifndef ASC48_MAP_H")
     h_lines.append("#define ASC48_MAP_H")
@@ -62,18 +68,25 @@ def main():
     h_lines.append(f"#define ASC48_CHAR_SIZE {CHAR_BYTES}")
     h_lines.append(f"#define ASC48_CHAR_COUNT {len(char_list)}")
     h_lines.append("")
-    # 字符查找表
-    h_lines.append("static const char asc48_chars[] = {")
-    for c in char_list:
-        h_lines.append(f"    '{c}',")
+    h_lines.append("// ASCII码(0~127) -> 点阵在bin中的下标，-1=不存在")
+    h_lines.append("static const int8_t asc48_lookup[128] = {")
+    line_buf = []
+    for i in range(128):
+        line_buf.append(str(ascii_lookup[i]))
+        if (i+1) % 16 == 0:
+            h_lines.append("    " + ", ".join(line_buf) + ",")
+            line_buf = []
+    if line_buf:
+        h_lines.append("    " + ", ".join(line_buf) + ",")
     h_lines.append("};")
     h_lines.append("")
-    # 简单查找函数，输入字符返回索引，找不到返回 -1
-    h_lines.append("static inline int asc48_find_idx(char c) {")
-    h_lines.append("    for(int i=0; i<ASC48_CHAR_COUNT; i++){")
-    h_lines.append("        if(asc48_chars[i] == c) return i;")
-    h_lines.append("    }")
-    h_lines.append("    return -1;")
+    # 获取点阵指针，直接用，无循环！
+    h_lines.append("static inline uint8_t* asc48_get_bitmap(char c, uint8_t *base) {")
+    h_lines.append("    uint8_t code = (uint8_t)c;")
+    h_lines.append("    if(code >= 128) return NULL;")
+    h_lines.append("    int idx = asc48_lookup[code];")
+    h_lines.append("    if(idx == -1) return NULL;")
+    h_lines.append("    return base + idx * ASC48_CHAR_SIZE;")
     h_lines.append("}")
     h_lines.append("")
     h_lines.append("#endif")
@@ -83,7 +96,7 @@ def main():
 
     print(f"\n✅ 输出完成：")
     print(f"  {BIN_OUT}  点阵二进制")
-    print(f"  {H_OUT}    C头映射表")
+    print(f"  {H_OUT}    C头映射表（ASCII查表版，和HZK风格对齐）")
     print(f"  bin总大小: {len(bin_data)} bytes")
 
 

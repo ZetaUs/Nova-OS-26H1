@@ -1,0 +1,6 @@
+@echo off
+setlocal
+call "%~dp0\os\build.bat"
+if errorlevel 1 exit /b 1
+
+"%~dp0Program\qemu\qemu-system-x86_64.exe" -drive file="%~dp0\os\build\nova-os-26h2.img",format=raw -m 128M -boot c -vga std -no-reboot -no-shutdown

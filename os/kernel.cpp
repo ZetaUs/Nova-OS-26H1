@@ -258,8 +258,8 @@ static void draw_wallpaper() {
     fill_rect(mark_x - 38, mark_y - 38, 556, 556, 0x123D62);
     fill_rect(mark_x - 31, mark_y - 31, 542, 542, 0x0C2C4A);
     draw_logo(mark_x, mark_y, 6);
-    draw_text("Nova", mark_x - 14, mark_y + 540, 4, 0xFFFFFF);
-    draw_text("2026 下半年版", mark_x + 48, mark_y + 595, 1, 0x92CFF2);
+    draw_text("Nova", mark_x - 14, mark_y + 540, 3, 0xFFFFFF);
+    draw_text("2026 下半年版", mark_x + 48, mark_y + 605, 1, 0x92CFF2);
 }
 
 static void draw_start_menu() {

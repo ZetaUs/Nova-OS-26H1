@@ -15,7 +15,7 @@ static void draw_start_menu_actions();
 #include <cstddef>
 
 static volatile uint32_t* framebuffer;
-static volatile uint32_t* render_target;
+static uint32_t* render_target;
 static uint32_t screen_width;
 static uint32_t screen_height;
 static uint32_t screen_pitch;
@@ -30,6 +30,19 @@ static bool keyboard_extended;
 static uint8_t menu_selection;
 static uint32_t mouse_cursor_background[32 * 40];
 static const uintptr_t backbuffer_address = 0x01000000;
+
+static inline void copy_to_framebuffer(
+    volatile uint32_t* destination,
+    const uint32_t* source,
+    uint32_t pixel_count
+) {
+    __asm__ volatile(
+        "cld; rep movsl"
+        : "+D"(destination), "+S"(source), "+c"(pixel_count)
+        :
+        : "memory"
+    );
+}
 
 static const uint16_t mouse_cursor_outline[20] = {
     0xE000, 0xF000, 0xF800, 0x9E00, 0x8F00,
@@ -78,7 +91,7 @@ static void fill_rect(int x, int y, int width, int height, uint32_t color) {
     int right = x + width > static_cast<int>(screen_width) ? static_cast<int>(screen_width) : x + width;
     int bottom = y + height > static_cast<int>(screen_height) ? static_cast<int>(screen_height) : y + height;
     for (int row = top; row < bottom; ++row) {
-        volatile uint32_t* line = render_target + static_cast<uint32_t>(row) * (screen_pitch / 4) + left;
+        uint32_t* line = render_target + static_cast<uint32_t>(row) * (screen_pitch / 4) + left;
         for (int column = left; column < right; ++column) *line++ = color;
     }
 }
@@ -158,7 +171,7 @@ static void draw_ascii_character(char value, int x, int y, int scale, uint32_t c
             for (int scale_y = 0; scale_y < scale; ++scale_y) {
                 const int draw_y = target_y + scale_y;
                 if (draw_y < 0 || draw_y >= static_cast<int>(screen_height)) continue;
-                volatile uint32_t* line = render_target + static_cast<uint32_t>(draw_y) * row_stride;
+                uint32_t* line = render_target + static_cast<uint32_t>(draw_y) * row_stride;
                 for (int scale_x = 0; scale_x < scale; ++scale_x) {
                     const int draw_x = target_x + scale_x;
                     if (draw_x >= 0 && draw_x < static_cast<int>(screen_width)) line[draw_x] = color;
@@ -239,7 +252,7 @@ static void draw_nova_mark(int x, int y) {
 static void draw_wallpaper() {
     for (uint32_t y = 0; y < screen_height; ++y) {
         const uint32_t color = mix_color(0x07172A, 0x102F50, y, screen_height);
-        volatile uint32_t* row = render_target + y * (screen_pitch / 4);
+        uint32_t* row = render_target + y * (screen_pitch / 4);
         for (uint32_t x = 0; x < screen_width; ++x) row[x] = color;
     }
     draw_triangle(930, 120, 2490, 180, 1880, 1310, 0x0B2947);
@@ -277,10 +290,8 @@ static void present_backbuffer() {
     const uint32_t row_stride = screen_pitch / 4;
     for (uint32_t y = 0; y < screen_height; ++y) {
         volatile uint32_t* destination = framebuffer + y * row_stride;
-        volatile uint32_t* source = render_target + y * row_stride;
-        for (uint32_t x = 0; x < pixels_per_row; ++x) {
-            destination[x] = source[x];
-        }
+        const uint32_t* source = render_target + y * row_stride;
+        copy_to_framebuffer(destination, source, pixels_per_row);
     }
 }
 
@@ -294,8 +305,8 @@ static void present_rect(int x, int y, int width, int height) {
     const uint32_t row_stride = screen_pitch / 4;
     for (int row = top; row < bottom; ++row) {
         volatile uint32_t* destination = framebuffer + static_cast<uint32_t>(row) * row_stride + left;
-        volatile uint32_t* source = render_target + static_cast<uint32_t>(row) * row_stride + left;
-        for (int column = left; column < right; ++column) *destination++ = *source++;
+        const uint32_t* source = render_target + static_cast<uint32_t>(row) * row_stride + left;
+        copy_to_framebuffer(destination, source, static_cast<uint32_t>(right - left));
     }
 }
 
@@ -311,13 +322,13 @@ static void draw_start_menu_actions() {
 }
 
 static void refresh_start_menu_actions() {
-    render_target = reinterpret_cast<volatile uint32_t*>(backbuffer_address);
+    render_target = reinterpret_cast<uint32_t*>(backbuffer_address);
     draw_start_menu_actions();
     present_rect(52, static_cast<int>(screen_height) - 264, 510, 112);
 }
 
 static void refresh_start_menu() {
-    render_target = reinterpret_cast<volatile uint32_t*>(backbuffer_address);
+    render_target = reinterpret_cast<uint32_t*>(backbuffer_address);
     const int top = static_cast<int>(screen_height) - 618;
     if (start_menu_open) {
         draw_start_menu();
@@ -335,7 +346,7 @@ static void refresh_start_menu() {
 }
 
 static void draw_desktop() {
-    render_target = reinterpret_cast<volatile uint32_t*>(backbuffer_address);
+    render_target = reinterpret_cast<uint32_t*>(backbuffer_address);
     draw_wallpaper();
 
     draw_app_icon(54, 62, false);
@@ -389,7 +400,7 @@ static void wait_pit_ticks(uint32_t ticks) {
 }
 
 static void draw_loading_screen() {
-    render_target = reinterpret_cast<volatile uint32_t*>(backbuffer_address);
+    render_target = reinterpret_cast<uint32_t*>(backbuffer_address);
     fill_rect(0, 0, static_cast<int>(screen_width), static_cast<int>(screen_height), 0x07172A);
 
     const int center_x = static_cast<int>(screen_width / 2);
@@ -556,7 +567,7 @@ extern "C" __attribute__((noreturn)) void kernel_main(
     screen_width = width;
     screen_height = height;
     screen_pitch = pitch;
-    render_target = reinterpret_cast<volatile uint32_t*>(backbuffer_address);
+    render_target = reinterpret_cast<uint32_t*>(backbuffer_address);
     start_menu_open = false;
     mouse_x = static_cast<int>(screen_width / 2);
     mouse_y = static_cast<int>(screen_height / 2);

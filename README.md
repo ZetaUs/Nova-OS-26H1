@@ -12,7 +12,7 @@ From the workspace root, run:
 
 The build uses the Dev-C++ MinGW-w64 compiler (`-m64`), the bundled NASM assembler, and Python 3 to embed the Chinese glyphs and ASC48 English glyphs used by the desktop and menu. It produces `os\build\nova-os-26h2.img` so that an older running QEMU instance can keep using the previous disk image. If Dev-C++ is installed elsewhere, set `DEVCPP_HOME` to its installation directory before building.
 
-The BIOS loader requests a VBE linear framebuffer, enables the QEMU/Bochs VBE 2560x1440x32 mode, builds identity-mapped 2 MiB page tables for the first 4 GiB, and enters x86-64 long mode. Desktop and loading frames are drawn to a back buffer before being presented, preventing partially rendered screen transitions. Back-buffer drawing uses normal memory writes, and each row is copied to the framebuffer with `REP MOVSD` for faster full-screen presentation. The kernel is deliberately freestanding and does not depend on a hosted C++ runtime.
+The BIOS loader requests a VBE linear framebuffer, enables the QEMU/Bochs VBE 1920x1080x32 mode, builds identity-mapped 2 MiB page tables for the first 4 GiB, and enters x86-64 long mode. The full-HD mode reduces software-rendering and framebuffer-copy work. Desktop and loading frames are drawn to a back buffer before being presented, preventing partially rendered screen transitions. Back-buffer drawing uses normal memory writes, and each row is copied to the framebuffer with `REP MOVSD` for faster full-screen presentation. The kernel is deliberately freestanding and does not depend on a hosted C++ runtime.
 
 ## Run
 
@@ -20,7 +20,7 @@ The BIOS loader requests a VBE linear framebuffer, enables the QEMU/Bochs VBE 25
 .\os\run.bat
 ```
 
-This builds the image and launches it in the bundled QEMU standard VGA device. A Nova loading screen appears before the 2560x1440 desktop. The desktop displays a software mouse pointer in the center of the screen. The desktop, taskbar, and start menu use Chinese labels. Press the **Windows key** or click the Nova button at the bottom left to open or close the start menu. In the open menu, use **Up/Down** to select **重启** or **关机**, then press **Enter**; these actions are also available by mouse. Press **Esc** to close an open menu. Selecting **关机** powers off the guest and exits QEMU.
+This builds the image and launches it in the bundled QEMU standard VGA device. A Nova loading screen appears before the 1920x1080 desktop. The desktop displays a software mouse pointer in the center of the screen. The desktop, taskbar, and start menu use Chinese labels. Press the **Windows key** or click the Nova button at the bottom left to open or close the start menu. In the open menu, use **Up/Down** to select **重启** or **关机**, then press **Enter**; these actions are also available by mouse. Press **Esc** to close an open menu. Selecting **关机** powers off the guest and exits QEMU.
 
 ## Image layout
 

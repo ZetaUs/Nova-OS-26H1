@@ -105,7 +105,7 @@ protected_mode_entry:
     mov ss, ax
     mov esp, 0x90000
 
-    ; Configure the Bochs/QEMU VBE extension for the 2560x1440x32 desktop.
+    ; Configure the Bochs/QEMU VBE extension for the 1920x1080x32 desktop.
     mov dx, 0x01CE
     xor ax, ax
     out dx, ax
@@ -124,13 +124,13 @@ protected_mode_entry:
     mov ax, 1
     out dx, ax
     inc dx
-    mov ax, 2560
+    mov ax, 1920
     out dx, ax
     mov dx, 0x01CE
     mov ax, 2
     out dx, ax
     inc dx
-    mov ax, 1440
+    mov ax, 1080
     out dx, ax
     mov dx, 0x01CE
     mov ax, 3
@@ -142,7 +142,7 @@ protected_mode_entry:
     mov ax, 6
     out dx, ax
     inc dx
-    mov ax, 2560
+    mov ax, 1920
     out dx, ax
     mov dx, 0x01CE
     mov ax, 4
@@ -223,13 +223,13 @@ long_mode_entry:
     mov ecx, [rel framebuffer_base]
     mov edi, 0x5000
     mov [rdi], ecx
-    mov dword [rdi + 4], 2560
-    mov dword [rdi + 8], 1440
-    mov dword [rdi + 12], 10240
+    mov dword [rdi + 4], 1920
+    mov dword [rdi + 8], 1080
+    mov dword [rdi + 12], 7680
     mov dword [rdi + 16], 32
 
-    mov edx, 2560
-    mov r8d, 1440
-    mov r9d, 10240
+    mov edx, 1920
+    mov r8d, 1080
+    mov r9d, 7680
     mov rax, 0x10000
     jmp rax

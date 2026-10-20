@@ -142,31 +142,51 @@ static void draw_chinese_glyph(int glyph_index, int x, int y, int scale, uint32_
     }
 }
 
-static void draw_ascii_character(char value, int x, int y, int scale, uint32_t color) {
+static bool ascii_pixel_filled(const uint8_t* bitmap, int row, int column) {
+    const int source_x = column * 2;
+    const int byte_index = source_x / 8;
+    const uint8_t left_mask = static_cast<uint8_t>(0x80 >> (source_x & 7));
+    const uint8_t right_mask = static_cast<uint8_t>(left_mask >> 1);
+    const uint8_t* source_top = bitmap + row * 12;
+    const uint8_t* source_bottom = source_top + 6;
+    return ((source_top[byte_index] & left_mask) != 0) ||
+           ((source_top[byte_index] & right_mask) != 0) ||
+           ((source_bottom[byte_index] & left_mask) != 0) ||
+           ((source_bottom[byte_index] & right_mask) != 0);
+}
+
+static int draw_ascii_character(char value, int x, int y, int scale, uint32_t color) {
     const uint8_t* bitmap = asc48_get_bitmap(value, ascii_glyph_bitmaps[0]);
     if (bitmap == NULL) {
         const int pixel_scale = scale * 3;
-        if (value == '.') fill_rect(x, y + 6 * pixel_scale, pixel_scale, pixel_scale, color);
-        else if (value == '-') fill_rect(x, y + 3 * pixel_scale, 4 * pixel_scale, pixel_scale, color);
-        return;
+        if (value == '.') {
+            fill_rect(x, y + 6 * pixel_scale, pixel_scale, pixel_scale, color);
+            return 6 * scale;
+        }
+        if (value == '-') {
+            fill_rect(x, y + 3 * pixel_scale, 4 * pixel_scale, pixel_scale, color);
+            return 15 * scale;
+        }
+        return 15 * scale;
     }
+
+    int first_column = 24;
+    int last_column = -1;
+    for (int row = 0; row < 24; ++row) {
+        for (int column = 0; column < 24; ++column) {
+            if (!ascii_pixel_filled(bitmap, row, column)) continue;
+            if (column < first_column) first_column = column;
+            if (column > last_column) last_column = column;
+        }
+    }
+    if (last_column < first_column) return 15 * scale;
 
     const uint32_t row_stride = screen_pitch / 4;
     for (int row = 0; row < 24; ++row) {
-        const uint8_t* source_top = bitmap + row * 12;
-        const uint8_t* source_bottom = source_top + 6;
-        for (int column = 0; column < 24; ++column) {
-            const int source_x = column * 2;
-            const int byte_index = source_x / 8;
-            const uint8_t left_mask = static_cast<uint8_t>(0x80 >> (source_x & 7));
-            const uint8_t right_mask = static_cast<uint8_t>(left_mask >> 1);
-            const bool filled = ((source_top[byte_index] & left_mask) != 0) ||
-                                ((source_top[source_x / 8 + (source_x % 8 == 7)] & right_mask) != 0) ||
-                                ((source_bottom[byte_index] & left_mask) != 0) ||
-                                ((source_bottom[source_x / 8 + (source_x % 8 == 7)] & right_mask) != 0);
-            if (!filled) continue;
+        for (int column = first_column; column <= last_column; ++column) {
+            if (!ascii_pixel_filled(bitmap, row, column)) continue;
 
-            const int target_x = x + column * scale;
+            const int target_x = x + (column - first_column) * scale;
             const int target_y = y + row * scale;
             for (int scale_y = 0; scale_y < scale; ++scale_y) {
                 const int draw_y = target_y + scale_y;
@@ -178,6 +198,7 @@ static void draw_ascii_character(char value, int x, int y, int scale, uint32_t c
                 }
             }
         }
+        return (last_column - first_column + 1 + 2) * scale;
     }
 }
 
@@ -204,10 +225,9 @@ static void draw_text(const char* text, int x, int y, int scale, uint32_t color)
             draw_chinese_glyph(find_chinese_glyph(codepoint), x, y, scale, color);
             x += 24 * scale;
         } else if (codepoint == ' ') {
-            x += 12 * scale;
+            x += 7 * scale;
         } else {
-            draw_ascii_character(static_cast<char>(codepoint), x, y, scale, color);
-            x += 24 * scale;
+            x += draw_ascii_character(static_cast<char>(codepoint), x, y, scale, color);
         }
     }
 }
@@ -464,6 +484,8 @@ static bool initialize_mouse() {
     if (!wait_mouse_input_ready()) return false;
     out8(0x64, 0xA8);
     if (!send_mouse_command(0xF6)) return false;
+    if (!send_mouse_command(0xF3)) return false;
+    if (!send_mouse_command(200)) return false;
     return send_mouse_command(0xF4);
 }
 
@@ -525,8 +547,8 @@ static void handle_mouse_packet() {
     if ((flags & 0xC0) != 0) return;
 
     restore_mouse_cursor();
-    move_mouse(static_cast<int8_t>(mouse_packet[1]),
-               -static_cast<int8_t>(mouse_packet[2]));
+    move_mouse(static_cast<int8_t>(mouse_packet[1]) * 2,
+               -static_cast<int8_t>(mouse_packet[2]) * 2);
 
     const uint8_t buttons = flags & 7;
     if ((buttons & 1) != 0 && (mouse_buttons & 1) == 0) {

@@ -20,7 +20,7 @@ The BIOS loader requests a VBE linear framebuffer, enables the QEMU/Bochs VBE 25
 .\os\run.bat
 ```
 
-This builds the image and launches it in the bundled QEMU standard VGA device. A Nova loading screen appears before the 2560x1440 desktop. The desktop displays a software mouse pointer in the center of the screen. The desktop, taskbar, and start menu use Chinese labels. Press the **Windows key** or click the Nova button at the bottom left to open or close the start menu. In the open menu, use **Up/Down** to select **重启** or **关机**, then press **Enter**; these actions are also available by mouse. Press **Esc** to close an open menu.
+This builds the image and launches it in the bundled QEMU standard VGA device. A Nova loading screen appears before the 2560x1440 desktop. The desktop displays a software mouse pointer in the center of the screen. The desktop, taskbar, and start menu use Chinese labels. Press the **Windows key** or click the Nova button at the bottom left to open or close the start menu. In the open menu, use **Up/Down** to select **重启** or **关机**, then press **Enter**; these actions are also available by mouse. Press **Esc** to close an open menu. Selecting **关机** powers off the guest and exits QEMU.
 
 ## Image layout
 

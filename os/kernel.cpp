@@ -2,13 +2,14 @@ typedef unsigned char uint8_t;
 typedef signed char int8_t;
 typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
+typedef unsigned long long uint64_t;
 typedef unsigned long long uintptr_t;
 
 static void put_pixel(int x, int y, uint32_t color);
 static void pixel(uint16_t x, uint16_t y, uint8_t color);
 static void draw_start_menu_actions();
 
-#include "logo_data.h"
+#include <logo_data.h>
 #include "chinese_font.h"
 #include "../HZKX/asc48_map.h"
 #include "ascii_font.h"
@@ -234,58 +235,112 @@ static void draw_text(const char* text, int x, int y, int scale, uint32_t color)
     }
 }
 
-static void draw_logo(int x, int y, int scale) {
-    if (scale <= 0) return;
-    const int output_width = logo_width * scale;
-    const int output_height = logo_height * scale;
-    const int row_stride = static_cast<int>(screen_pitch / 4);
+static void decode_logo_row(
+    uint8_t* row,
+    uint32_t& run_offset,
+    uint32_t& run_remaining,
+    uint8_t& run_value
+) {
+    for (int column = 0; column < LOGO_WIDTH; ++column) {
+        if (run_remaining == 0) {
+            run_remaining = logo_alpha_rle[run_offset++];
+            run_value = logo_alpha_rle[run_offset++];
+        }
+        row[column] = run_value;
+        --run_remaining;
+    }
+}
 
-    for (int output_y = 0; output_y < output_height; ++output_y) {
+static void draw_logo(int x, int y, int output_size) {
+    if (output_size <= 0) return;
+    uint8_t first_row[LOGO_WIDTH];
+    uint8_t second_row[LOGO_WIDTH];
+    uint8_t* top_row = first_row;
+    uint8_t* bottom_row = second_row;
+    uint32_t run_offset = 0;
+    uint32_t run_remaining = 0;
+    uint8_t run_value = 0;
+    int decoded_row = 0;
+    decode_logo_row(top_row, run_offset, run_remaining, run_value);
+    if (LOGO_HEIGHT > 1) {
+        decode_logo_row(bottom_row, run_offset, run_remaining, run_value);
+    } else {
+        bottom_row = top_row;
+    }
+
+    const int row_stride = static_cast<int>(screen_pitch / 4);
+    for (int output_y = 0; output_y < output_size; ++output_y) {
         const int target_y = y + output_y;
-        if (target_y < 0 || target_y >= static_cast<int>(screen_height)) continue;
-        const int source_y_fixed = ((output_y * 2 + 1) * 32768 / scale) - 32768;
+        long long source_y_fixed = (
+            static_cast<uint64_t>(2 * output_y + 1) * LOGO_HEIGHT * 32768 / output_size
+        ) - 32768;
         int source_y = source_y_fixed / 65536;
         int fraction_y = source_y_fixed % 65536;
         if (fraction_y < 0) {
             --source_y;
             fraction_y += 65536;
         }
-        uint32_t* line = render_target + static_cast<uint32_t>(target_y) * row_stride;
+        if (source_y < 0) {
+            source_y = 0;
+            fraction_y = 0;
+        }
+        if (source_y >= LOGO_HEIGHT - 1) {
+            source_y = LOGO_HEIGHT - 1;
+            fraction_y = 0;
+        }
+        while (decoded_row < source_y) {
+            uint8_t* previous_top = top_row;
+            top_row = bottom_row;
+            bottom_row = previous_top;
+            ++decoded_row;
+            if (decoded_row < LOGO_HEIGHT - 1) {
+                decode_logo_row(bottom_row, run_offset, run_remaining, run_value);
+            } else {
+                bottom_row = top_row;
+            }
+        }
+        if (target_y < 0 || target_y >= static_cast<int>(screen_height)) continue;
 
-        for (int output_x = 0; output_x < output_width; ++output_x) {
+        uint32_t* line = render_target + static_cast<uint32_t>(target_y) * row_stride;
+        for (int output_x = 0; output_x < output_size; ++output_x) {
             const int target_x = x + output_x;
             if (target_x < 0 || target_x >= static_cast<int>(screen_width)) continue;
-            const int source_x_fixed = ((output_x * 2 + 1) * 32768 / scale) - 32768;
+            long long source_x_fixed = (
+                static_cast<uint64_t>(2 * output_x + 1) * LOGO_WIDTH * 32768 / output_size
+            ) - 32768;
             int source_x = source_x_fixed / 65536;
             int fraction_x = source_x_fixed % 65536;
             if (fraction_x < 0) {
                 --source_x;
                 fraction_x += 65536;
             }
+            if (source_x < 0) {
+                source_x = 0;
+                fraction_x = 0;
+            }
+            if (source_x >= LOGO_WIDTH - 1) {
+                source_x = LOGO_WIDTH - 1;
+                fraction_x = 0;
+            }
 
-            const uint32_t background = line[target_x];
-            const uint32_t top_left = source_x >= 0 && source_x < logo_width &&
-                source_y >= 0 && source_y < logo_height &&
-                logo_data[source_y * logo_width + source_x] != 0
-                ? logo_colors[logo_data[source_y * logo_width + source_x] & 15] : background;
-            const uint32_t top_right = source_x + 1 >= 0 && source_x + 1 < logo_width &&
-                source_y >= 0 && source_y < logo_height &&
-                logo_data[source_y * logo_width + source_x + 1] != 0
-                ? logo_colors[logo_data[source_y * logo_width + source_x + 1] & 15] : background;
-            const uint32_t bottom_left = source_x >= 0 && source_x < logo_width &&
-                source_y + 1 >= 0 && source_y + 1 < logo_height &&
-                logo_data[(source_y + 1) * logo_width + source_x] != 0
-                ? logo_colors[logo_data[(source_y + 1) * logo_width + source_x] & 15] : background;
-            const uint32_t bottom_right = source_x + 1 >= 0 && source_x + 1 < logo_width &&
-                source_y + 1 >= 0 && source_y + 1 < logo_height &&
-                logo_data[(source_y + 1) * logo_width + source_x + 1] != 0
-                ? logo_colors[logo_data[(source_y + 1) * logo_width + source_x + 1] & 15] : background;
-            const uint32_t top = mix_color(top_left, top_right,
-                static_cast<uint32_t>(fraction_x), 65536);
-            const uint32_t bottom = mix_color(bottom_left, bottom_right,
-                static_cast<uint32_t>(fraction_x), 65536);
-            line[target_x] = mix_color(top, bottom,
-                static_cast<uint32_t>(fraction_y), 65536);
+            const uint32_t next_source_x =
+                static_cast<uint32_t>(source_x + (source_x < LOGO_WIDTH - 1));
+            const uint32_t top_alpha = static_cast<uint32_t>((
+                static_cast<uint64_t>(top_row[source_x]) * (65536 - fraction_x) +
+                static_cast<uint64_t>(top_row[next_source_x]) * fraction_x + 32768
+            ) >> 16);
+            const uint32_t bottom_alpha = static_cast<uint32_t>((
+                static_cast<uint64_t>(bottom_row[source_x]) * (65536 - fraction_x) +
+                static_cast<uint64_t>(bottom_row[next_source_x]) * fraction_x + 32768
+            ) >> 16);
+            const uint64_t alpha_fixed =
+                static_cast<uint64_t>(top_alpha) * (65536 - fraction_y) +
+                static_cast<uint64_t>(bottom_alpha) * fraction_y + (1ull << 31);
+            const int alpha = static_cast<int>(alpha_fixed >> 32);
+            if (alpha != 0) {
+                line[target_x] = mix_color(line[target_x], logo_colors[14],
+                    static_cast<uint32_t>(alpha * 17), 255);
+            }
         }
     }
 }
@@ -375,7 +430,7 @@ static void draw_wallpaper() {
     const int mark_y = 330;
     fill_rect(mark_x - 38, mark_y - 38, 556, 556, 0x123D62);
     fill_rect(mark_x - 31, mark_y - 31, 542, 542, 0x0C2C4A);
-    draw_logo(mark_x, mark_y, 6);
+    draw_logo(mark_x, mark_y, 480);
     draw_text("Nova", mark_x - 14, mark_y + 540, 3, 0xFFFFFF);
     draw_text("2026 下半年版", mark_x + 48, mark_y + 605, 1, 0x92CFF2);
 }
@@ -493,6 +548,10 @@ static void out16(uint16_t port, uint16_t value) {
     __asm__ volatile("outw %0, %1" : : "a"(value), "Nd"(port));
 }
 
+static void out32(uint16_t port, uint32_t value) {
+    __asm__ volatile("outl %0, %1" : : "a"(value), "Nd"(port));
+}
+
 static uint16_t pit_read_count() {
     out8(0x43, 0);
     const uint16_t low = in8(0x40);
@@ -516,7 +575,7 @@ static void draw_loading_screen() {
 
     const int center_x = static_cast<int>(screen_width / 2);
     const int center_y = static_cast<int>(screen_height / 2);
-    draw_logo(center_x - 160, center_y - 230, 4);
+    draw_logo(center_x - 160, center_y - 230, 320);
     draw_text("Nova", center_x - 108, center_y + 110, 3, 0xFFFFFF);
     draw_text("2026 下半年版", center_x - 132, center_y + 182, 1, 0x92CFF2);
     draw_text("正在启动", center_x - 96, center_y + 226, 1, 0xCBD5E1);
@@ -542,8 +601,9 @@ static __attribute__((noreturn)) void restart_system() {
 }
 
 static __attribute__((noreturn)) void shutdown_system() {
-    out16(0x0604, 0x2000);
+    out16(0x0604, 0x3400);
     out16(0xB004, 0x2000);
+    out32(0x00F4, 0x10);
     for (;;) __asm__ volatile("cli; hlt");
 }
 

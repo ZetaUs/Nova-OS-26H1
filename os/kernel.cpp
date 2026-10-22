@@ -142,17 +142,8 @@ static void draw_chinese_glyph(int glyph_index, int x, int y, int scale, uint32_
     }
 }
 
-static bool ascii_pixel_filled(const uint8_t* bitmap, int row, int column) {
-    const int source_x = column * 2;
-    const int byte_index = source_x / 8;
-    const uint8_t left_mask = static_cast<uint8_t>(0x80 >> (source_x & 7));
-    const uint8_t right_mask = static_cast<uint8_t>(left_mask >> 1);
-    const uint8_t* source_top = bitmap + row * 12;
-    const uint8_t* source_bottom = source_top + 6;
-    return ((source_top[byte_index] & left_mask) != 0) ||
-           ((source_top[byte_index] & right_mask) != 0) ||
-           ((source_bottom[byte_index] & left_mask) != 0) ||
-           ((source_bottom[byte_index] & right_mask) != 0);
+static bool ascii_source_pixel(const uint8_t* bitmap, int x, int y) {
+    return (bitmap[y * 6 + x / 8] & (0x80 >> (x & 7))) != 0;
 }
 
 static int draw_ascii_character(char value, int x, int y, int scale, uint32_t color) {
@@ -170,36 +161,47 @@ static int draw_ascii_character(char value, int x, int y, int scale, uint32_t co
         return 15 * scale;
     }
 
-    int first_column = 24;
+    int first_column = 48;
     int last_column = -1;
-    for (int row = 0; row < 24; ++row) {
-        for (int column = 0; column < 24; ++column) {
-            if (!ascii_pixel_filled(bitmap, row, column)) continue;
-            if (column < first_column) first_column = column;
-            if (column > last_column) last_column = column;
+    for (int source_y = 0; source_y < 48; ++source_y) {
+        for (int source_x = 0; source_x < 48; ++source_x) {
+            if (!ascii_source_pixel(bitmap, source_x, source_y)) continue;
+            if (source_x < first_column) first_column = source_x;
+            if (source_x > last_column) last_column = source_x;
         }
     }
     if (last_column < first_column) return 15 * scale;
 
     const uint32_t row_stride = screen_pitch / 4;
-    for (int row = 0; row < 24; ++row) {
-        for (int column = first_column; column <= last_column; ++column) {
-            if (!ascii_pixel_filled(bitmap, row, column)) continue;
-
-            const int target_x = x + (column - first_column) * scale;
-            const int target_y = y + row * scale;
-            for (int scale_y = 0; scale_y < scale; ++scale_y) {
-                const int draw_y = target_y + scale_y;
-                if (draw_y < 0 || draw_y >= static_cast<int>(screen_height)) continue;
-                uint32_t* line = render_target + static_cast<uint32_t>(draw_y) * row_stride;
-                for (int scale_x = 0; scale_x < scale; ++scale_x) {
-                    const int draw_x = target_x + scale_x;
-                    if (draw_x >= 0 && draw_x < static_cast<int>(screen_width)) line[draw_x] = color;
+    const int source_width = last_column - first_column + 1;
+    const int output_width = (source_width * scale + 1) / 2;
+    const int output_height = 24 * scale;
+    for (int output_y = 0; output_y < output_height; ++output_y) {
+        const int target_y = y + output_y;
+        if (target_y < 0 || target_y >= static_cast<int>(screen_height)) continue;
+        uint32_t* line = render_target + static_cast<uint32_t>(target_y) * row_stride;
+        for (int output_x = 0; output_x < output_width; ++output_x) {
+            int coverage = 0;
+            for (int sample_y = 0; sample_y < 2; ++sample_y) {
+                const int source_y =
+                    (output_y * 2 + sample_y) / scale;
+                for (int sample_x = 0; sample_x < 2; ++sample_x) {
+                    const int source_x = first_column +
+                        (output_x * 2 + sample_x) / scale;
+                    if (source_x <= last_column &&
+                        ascii_source_pixel(bitmap, source_x, source_y)) {
+                        ++coverage;
+                    }
                 }
             }
+            const int target_x = x + output_x;
+            if (coverage == 0 || target_x < 0 ||
+                target_x >= static_cast<int>(screen_width)) continue;
+            line[target_x] = mix_color(line[target_x], color,
+                                       static_cast<uint32_t>(coverage), 4);
         }
     }
-    return (last_column - first_column + 1 + 2) * scale;
+    return output_width + 2 * scale;
 }
 
 static void draw_text(const char* text, int x, int y, int scale, uint32_t color) {
@@ -233,13 +235,57 @@ static void draw_text(const char* text, int x, int y, int scale, uint32_t color)
 }
 
 static void draw_logo(int x, int y, int scale) {
-    for (uint32_t row = 0; row < logo_height; ++row) {
-        for (uint32_t column = 0; column < logo_width; ++column) {
-            const uint8_t index = logo_data[row * logo_width + column];
-            if (index == 0) continue;
-            fill_rect(x + static_cast<int>(column) * scale,
-                     y + static_cast<int>(row) * scale,
-                     scale, scale, logo_colors[index & 15]);
+    if (scale <= 0) return;
+    const int output_width = logo_width * scale;
+    const int output_height = logo_height * scale;
+    const int row_stride = static_cast<int>(screen_pitch / 4);
+
+    for (int output_y = 0; output_y < output_height; ++output_y) {
+        const int target_y = y + output_y;
+        if (target_y < 0 || target_y >= static_cast<int>(screen_height)) continue;
+        const int source_y_fixed = ((output_y * 2 + 1) * 32768 / scale) - 32768;
+        int source_y = source_y_fixed / 65536;
+        int fraction_y = source_y_fixed % 65536;
+        if (fraction_y < 0) {
+            --source_y;
+            fraction_y += 65536;
+        }
+        uint32_t* line = render_target + static_cast<uint32_t>(target_y) * row_stride;
+
+        for (int output_x = 0; output_x < output_width; ++output_x) {
+            const int target_x = x + output_x;
+            if (target_x < 0 || target_x >= static_cast<int>(screen_width)) continue;
+            const int source_x_fixed = ((output_x * 2 + 1) * 32768 / scale) - 32768;
+            int source_x = source_x_fixed / 65536;
+            int fraction_x = source_x_fixed % 65536;
+            if (fraction_x < 0) {
+                --source_x;
+                fraction_x += 65536;
+            }
+
+            const uint32_t background = line[target_x];
+            const uint32_t top_left = source_x >= 0 && source_x < logo_width &&
+                source_y >= 0 && source_y < logo_height &&
+                logo_data[source_y * logo_width + source_x] != 0
+                ? logo_colors[logo_data[source_y * logo_width + source_x] & 15] : background;
+            const uint32_t top_right = source_x + 1 >= 0 && source_x + 1 < logo_width &&
+                source_y >= 0 && source_y < logo_height &&
+                logo_data[source_y * logo_width + source_x + 1] != 0
+                ? logo_colors[logo_data[source_y * logo_width + source_x + 1] & 15] : background;
+            const uint32_t bottom_left = source_x >= 0 && source_x < logo_width &&
+                source_y + 1 >= 0 && source_y + 1 < logo_height &&
+                logo_data[(source_y + 1) * logo_width + source_x] != 0
+                ? logo_colors[logo_data[(source_y + 1) * logo_width + source_x] & 15] : background;
+            const uint32_t bottom_right = source_x + 1 >= 0 && source_x + 1 < logo_width &&
+                source_y + 1 >= 0 && source_y + 1 < logo_height &&
+                logo_data[(source_y + 1) * logo_width + source_x + 1] != 0
+                ? logo_colors[logo_data[(source_y + 1) * logo_width + source_x + 1] & 15] : background;
+            const uint32_t top = mix_color(top_left, top_right,
+                static_cast<uint32_t>(fraction_x), 65536);
+            const uint32_t bottom = mix_color(bottom_left, bottom_right,
+                static_cast<uint32_t>(fraction_x), 65536);
+            line[target_x] = mix_color(top, bottom,
+                static_cast<uint32_t>(fraction_y), 65536);
         }
     }
 }
@@ -415,7 +461,7 @@ static void draw_desktop() {
     draw_wallpaper();
 
     draw_app_icon(54, 62, false);
-    draw_text("此电脑", 54, 166, 1, 0xFFFFFF);
+    draw_text("此电脑", 66, 166, 1, 0xFFFFFF);
     draw_app_icon(54, 218, true);
     draw_text("文件管理", 54, 322, 1, 0xFFFFFF);
 

@@ -1,3 +1,4 @@
+@echo off
 git rm -r --cached .
 if errorlevel 1 exit /b 1
 git add .
@@ -20,7 +21,7 @@ if not "%CURRENT_BRANCH%"=="main" (
 
 git diff --cached --quiet
 if errorlevel 1 (
-	git commit -m "fix: 应用gitignore，取消追踪不需要提交的文件"
+	git commit -m "fix: push"
 	if errorlevel 1 exit /b 1
 )
 

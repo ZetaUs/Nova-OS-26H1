@@ -1,4 +1,7 @@
 @echo off
+
+cd ..
+
 chcp 65001 >nul
 setlocal
 

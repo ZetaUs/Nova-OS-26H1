@@ -1,4 +1,7 @@
 @echo off
+
+cd ..
+
 git rm -r --cached .
 if errorlevel 1 exit /b 1
 git add .

@@ -198,8 +198,8 @@ static int draw_ascii_character(char value, int x, int y, int scale, uint32_t co
                 }
             }
         }
-        return (last_column - first_column + 1 + 2) * scale;
     }
+    return (last_column - first_column + 1 + 2) * scale;
 }
 
 static void draw_text(const char* text, int x, int y, int scale, uint32_t color) {

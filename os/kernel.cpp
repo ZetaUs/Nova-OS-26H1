@@ -2,6 +2,7 @@ typedef unsigned char uint8_t;
 typedef signed char int8_t;
 typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
+typedef signed long long int64_t;
 typedef unsigned long long uintptr_t;
 
 static void put_pixel(int x, int y, uint32_t color);
@@ -28,7 +29,9 @@ static uint8_t mouse_buttons;
 static bool mouse_cursor_drawn;
 static bool keyboard_extended;
 static uint8_t menu_selection;
-static uint32_t mouse_cursor_background[32 * 40];
+static uint32_t mouse_cursor_background[48 * 60];
+static uint8_t mouse_cursor_outline_coverage[48 * 60];
+static uint8_t mouse_cursor_fill_coverage[48 * 60];
 static const uintptr_t backbuffer_address = 0x01000000;
 
 static inline void copy_to_framebuffer(
@@ -44,18 +47,12 @@ static inline void copy_to_framebuffer(
     );
 }
 
-static const uint16_t mouse_cursor_outline[20] = {
-    0xE000, 0xF000, 0xF800, 0x9E00, 0x8F00,
-    0x83C0, 0x81E0, 0x8070, 0x803C, 0x81FE,
-    0x81FE, 0x98C0, 0xBCE0, 0xFC60, 0xEE70,
-    0xC630, 0x8738, 0x03F8, 0x01F0, 0x01C0
+static const int mouse_cursor_outline_points[][2] = {
+    {1, 1}, {1, 51}, {13, 39}, {23, 59}, {32, 55}, {23, 36}, {45, 36}
 };
 
-static const uint16_t mouse_cursor_fill[20] = {
-    0x0000, 0xC000, 0xE000, 0xF800, 0xFC00,
-    0xFE00, 0xFF80, 0xFFC0, 0xFFF0, 0xFFF8,
-    0xFF00, 0xFF80, 0xEF80, 0xC7C0, 0x83C0,
-    0x03E0, 0x01F0, 0x01E0, 0x0080, 0x0000
+static const int mouse_cursor_fill_points[][2] = {
+    {5, 9}, {5, 41}, {16, 30}, {26, 51}, {28, 49}, {19, 31}, {38, 31}
 };
 
 static const uint32_t logo_colors[16] = {
@@ -348,6 +345,58 @@ static void draw_app_icon(int x, int y, bool explorer) {
     }
 }
 
+static void draw_desktop_app_icon(int x, int y, uint8_t app) {
+    if (app < 2) {
+        draw_app_icon(x, y, app == 0);
+        return;
+    }
+
+    fill_rounded_rect_gradient(x, y, 96, 96, 20, 0x0A4D83, 0x07365F);
+    fill_rounded_rect_gradient(x + 2, y + 2, 92, 92, 18, 0x51C5F5, 0x1672B8);
+    fill_rounded_rect_gradient(x + 5, y + 5, 86, 86, 15, 0x35A8E5, 0x125B9C);
+
+    if (app == 2) {
+        fill_rounded_rect_gradient(x + 25, y + 14, 48, 66, 6, 0xF7FCFF, 0xC9DFEE);
+        fill_rounded_rect_gradient(x + 31, y + 22, 36, 4, 2, 0x2495D0, 0x1271B2);
+        fill_rounded_rect_gradient(x + 32, y + 34, 33, 3, 1, 0x91ABC0, 0x7290A9);
+        fill_rounded_rect_gradient(x + 32, y + 43, 30, 3, 1, 0x91ABC0, 0x7290A9);
+        fill_rounded_rect_gradient(x + 32, y + 52, 33, 3, 1, 0x91ABC0, 0x7290A9);
+        fill_rounded_rect_gradient(x + 32, y + 61, 24, 3, 1, 0x91ABC0, 0x7290A9);
+    } else if (app == 3) {
+        fill_rect(x + 16, y + 45, 64, 4, 0xD7F5FF);
+        fill_rect(x + 46, y + 16, 4, 64, 0xD7F5FF);
+        fill_rounded_rect_gradient(x + 18, y + 18, 60, 60, 30, 0x75D8FF, 0x1268A7);
+        fill_rect(x + 20, y + 45, 56, 4, 0xD7F5FF);
+        fill_rect(x + 46, y + 20, 4, 56, 0xD7F5FF);
+        fill_rounded_rect_gradient(x + 31, y + 22, 34, 6, 3, 0xD7F5FF, 0x83D5F8);
+        fill_rounded_rect_gradient(x + 31, y + 68, 34, 6, 3, 0xD7F5FF, 0x83D5F8);
+    } else if (app == 4) {
+        for (int spoke = 0; spoke < 8; ++spoke) {
+            const int offset = (spoke & 1) ? 13 : 5;
+            fill_rounded_rect_gradient(x + 43, y + offset, 10, 20, 4,
+                                       0xE7F7FF, 0x9CCDE7);
+            if (spoke < 4) {
+                fill_rounded_rect_gradient(x + offset, y + 43, 20, 10, 4,
+                                           0xE7F7FF, 0x9CCDE7);
+            }
+        }
+        fill_rounded_rect_gradient(x + 25, y + 25, 46, 46, 23, 0xE7F7FF, 0x8CBAD8);
+        fill_rounded_rect_gradient(x + 36, y + 36, 24, 24, 12, 0x17446C, 0x0B2F51);
+    } else {
+        fill_rounded_rect_gradient(x + 15, y + 20, 66, 50, 8, 0xE8F7FF, 0x9BCBE7);
+        fill_rounded_rect_gradient(x + 20, y + 25, 56, 39, 4, 0x13253B, 0x071421);
+        draw_triangle(x + 29, y + 36, x + 37, y + 43, x + 29, y + 50, 0x65D7FF);
+        fill_rounded_rect_gradient(x + 41, y + 47, 22, 3, 1, 0xA5F18B, 0x65C75B);
+        fill_rounded_rect_gradient(x + 38, y + 71, 20, 8, 3, 0xE8F7FF, 0x9BCBE7);
+        fill_rounded_rect_gradient(x + 29, y + 79, 38, 5, 2, 0xE8F7FF, 0x9BCBE7);
+    }
+}
+
+static void draw_desktop_icon_label(const char* text, int center_x, int y, int characters) {
+    const int text_width = characters * 24;
+    draw_text(text, center_x - text_width / 2, y, 1, 0xFFFFFF);
+}
+
 static void draw_nova_mark(int x, int y) {
     const uint32_t color = 0x75D8FF;
     fill_rect(x, y, 44, 44, 0x103653);
@@ -458,10 +507,16 @@ static void draw_desktop() {
     render_target = reinterpret_cast<uint32_t*>(backbuffer_address);
     draw_wallpaper();
 
-    draw_app_icon(54, 62, false);
-    draw_text("此电脑", 66, 166, 1, 0xFFFFFF);
-    draw_app_icon(54, 218, true);
-    draw_text("文件管理", 54, 322, 1, 0xFFFFFF);
+    draw_desktop_app_icon(54, 62, 0);
+    draw_desktop_icon_label("文件管理器", 102, 166, 5);
+    draw_desktop_app_icon(54, 218, 2);
+    draw_desktop_icon_label("记事本", 102, 322, 3);
+    draw_desktop_app_icon(54, 374, 3);
+    draw_desktop_icon_label("浏览器", 102, 478, 3);
+    draw_desktop_app_icon(54, 530, 4);
+    draw_desktop_icon_label("设置", 102, 634, 2);
+    draw_desktop_app_icon(54, 686, 5);
+    draw_desktop_icon_label("终端", 102, 790, 2);
 
     fill_rect(0, static_cast<int>(screen_height) - 76, static_cast<int>(screen_width), 76, 0xE8102033);
     fill_rect(0, static_cast<int>(screen_height) - 76, static_cast<int>(screen_width), 1, 0x31506C);
@@ -493,6 +548,50 @@ static void out16(uint16_t port, uint16_t value) {
 
 static void out32(uint16_t port, uint32_t value) {
     __asm__ volatile("outl %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static bool cursor_polygon_contains(const int points[][2], int count, int x, int y) {
+    bool inside = false;
+    for (int current = 0, previous = count - 1; current < count; previous = current++) {
+        const int x1 = points[current][0] * 4;
+        const int y1 = points[current][1] * 4;
+        const int x2 = points[previous][0] * 4;
+        const int y2 = points[previous][1] * 4;
+        if ((y1 > y) != (y2 > y)) {
+            const int64_t intersection =
+                static_cast<int64_t>(x2 - x1) * (y - y1) / (y2 - y1) + x1;
+            if (x < intersection) inside = !inside;
+        }
+    }
+    return inside;
+}
+
+static void initialize_mouse_cursor() {
+    const int outline_count =
+        sizeof(mouse_cursor_outline_points) / sizeof(mouse_cursor_outline_points[0]);
+    const int fill_count =
+        sizeof(mouse_cursor_fill_points) / sizeof(mouse_cursor_fill_points[0]);
+    for (int y = 0; y < 60; ++y) {
+        for (int x = 0; x < 48; ++x) {
+            uint8_t outline_coverage = 0;
+            uint8_t fill_coverage = 0;
+            for (int sample_y = 1; sample_y <= 3; sample_y += 2) {
+                for (int sample_x = 1; sample_x <= 3; sample_x += 2) {
+                    if (cursor_polygon_contains(mouse_cursor_outline_points, outline_count,
+                                               x * 4 + sample_x, y * 4 + sample_y)) {
+                        ++outline_coverage;
+                    }
+                    if (cursor_polygon_contains(mouse_cursor_fill_points, fill_count,
+                                               x * 4 + sample_x, y * 4 + sample_y)) {
+                        ++fill_coverage;
+                    }
+                }
+            }
+            const int index = y * 48 + x;
+            mouse_cursor_outline_coverage[index] = outline_coverage;
+            mouse_cursor_fill_coverage[index] = fill_coverage;
+        }
+    }
 }
 
 static uint16_t pit_read_count() {
@@ -544,9 +643,9 @@ static __attribute__((noreturn)) void restart_system() {
 }
 
 static __attribute__((noreturn)) void shutdown_system() {
+    out32(0x00F4, 0x10);
     out16(0x0604, 0x3400);
     out16(0xB004, 0x2000);
-    out32(0x00F4, 0x10);
     for (;;) __asm__ volatile("cli; hlt");
 }
 
@@ -586,40 +685,43 @@ static bool initialize_mouse() {
 static void restore_mouse_cursor() {
     if (!mouse_cursor_drawn) return;
 
-    for (int row = 0; row < 40; ++row) {
+    for (int row = 0; row < 60; ++row) {
         const int y = mouse_y + row;
         if (y < 0 || y >= static_cast<int>(screen_height)) continue;
-        for (int column = 0; column < 32; ++column) {
+        for (int column = 0; column < 48; ++column) {
             const int x = mouse_x + column;
             if (x < 0 || x >= static_cast<int>(screen_width)) continue;
             framebuffer[static_cast<uint32_t>(y) * (screen_pitch / 4) +
-                        static_cast<uint32_t>(x)] = mouse_cursor_background[row * 32 + column];
+                        static_cast<uint32_t>(x)] = mouse_cursor_background[row * 48 + column];
         }
     }
     mouse_cursor_drawn = false;
 }
 
 static void draw_mouse_cursor() {
-    for (int row = 0; row < 20; ++row) {
-        for (int column = 0; column < 16; ++column) {
-            const int bit = 15 - column;
-            const bool outline = (mouse_cursor_outline[row] & (1u << bit)) != 0;
-            const bool fill = (mouse_cursor_fill[row] & (1u << bit)) != 0;
-            for (int scale_y = 0; scale_y < 2; ++scale_y) {
-                const int y = mouse_y + row * 2 + scale_y;
-                if (y < 0 || y >= static_cast<int>(screen_height)) continue;
-                for (int scale_x = 0; scale_x < 2; ++scale_x) {
-                    const int x = mouse_x + column * 2 + scale_x;
-                    if (x < 0 || x >= static_cast<int>(screen_width)) continue;
-
-                    const int pixel_index = (row * 2 + scale_y) * 32 + column * 2 + scale_x;
-                    const uint32_t offset = static_cast<uint32_t>(y) * (screen_pitch / 4) +
-                                            static_cast<uint32_t>(x);
-                    mouse_cursor_background[pixel_index] = framebuffer[offset];
-                    if (outline) framebuffer[offset] = 0x00101A26;
-                    else if (fill) framebuffer[offset] = 0x00FFFFFF;
-                }
+    for (int row = 0; row < 60; ++row) {
+        const int y = mouse_y + row;
+        if (y < 0 || y >= static_cast<int>(screen_height)) continue;
+        for (int column = 0; column < 48; ++column) {
+            const int x = mouse_x + column;
+            if (x < 0 || x >= static_cast<int>(screen_width)) continue;
+            const int pixel_index = row * 48 + column;
+            const uint32_t offset = static_cast<uint32_t>(y) * (screen_pitch / 4) +
+                                    static_cast<uint32_t>(x);
+            const uint32_t background = framebuffer[offset];
+            mouse_cursor_background[pixel_index] = background;
+            const uint8_t outline = mouse_cursor_outline_coverage[pixel_index];
+            const uint8_t fill = mouse_cursor_fill_coverage[pixel_index];
+            uint32_t color = background;
+            if (outline != 0) {
+                color = mix_color(color, 0x00101A26,
+                    static_cast<uint32_t>(outline), 4);
             }
+            if (fill != 0) {
+                color = mix_color(color, 0x00FFFFFF,
+                    static_cast<uint32_t>(fill), 4);
+            }
+            if (outline != 0 || fill != 0) framebuffer[offset] = color;
         }
     }
     mouse_cursor_drawn = true;
@@ -641,8 +743,8 @@ static void handle_mouse_packet() {
     if ((flags & 0xC0) != 0) return;
 
     restore_mouse_cursor();
-    move_mouse(static_cast<int8_t>(mouse_packet[1]) * 2,
-               -static_cast<int8_t>(mouse_packet[2]) * 2);
+    move_mouse(static_cast<int8_t>(mouse_packet[1]),
+               -static_cast<int8_t>(mouse_packet[2]));
 
     const uint8_t buttons = flags & 7;
     if ((buttons & 1) != 0 && (mouse_buttons & 1) == 0) {
@@ -692,6 +794,7 @@ extern "C" __attribute__((noreturn)) void kernel_main(
     mouse_cursor_drawn = false;
     keyboard_extended = false;
     menu_selection = 0;
+    initialize_mouse_cursor();
     draw_loading_screen();
     draw_desktop();
     initialize_mouse();

@@ -244,18 +244,63 @@ static void draw_logo(int x, int y, int scale) {
     }
 }
 
+static void fill_rounded_rect_gradient(
+    int x,
+    int y,
+    int width,
+    int height,
+    int radius,
+    uint32_t top_color,
+    uint32_t bottom_color
+) {
+    if (width <= 0 || height <= 0) return;
+    if (radius * 2 > width) radius = width / 2;
+    if (radius * 2 > height) radius = height / 2;
+
+    const int radius_squared = radius * radius;
+    for (int row = 0; row < height; ++row) {
+        int inset = 0;
+        int distance_from_corner = 0;
+        if (row < radius) distance_from_corner = radius - row;
+        else if (row >= height - radius) distance_from_corner = row - (height - radius - 1);
+
+        while (inset < radius &&
+               (radius - inset) * (radius - inset) +
+                   distance_from_corner * distance_from_corner > radius_squared) {
+            ++inset;
+        }
+        const uint32_t color = mix_color(
+            top_color, bottom_color, static_cast<uint32_t>(row),
+            static_cast<uint32_t>(height > 1 ? height - 1 : 1));
+        fill_rect(x + inset, y + row, width - inset * 2, 1, color);
+    }
+}
+
 static void draw_app_icon(int x, int y, bool explorer) {
-    fill_rect(x, y, 72, 72, explorer ? 0x117FCA : 0x096DB2);
-    fill_rect(x + 3, y + 3, 66, 66, explorer ? 0x46B2E6 : 0x58BDF4);
+    fill_rounded_rect_gradient(x, y, 96, 96, 20, 0x0A4D83, 0x07365F);
+    fill_rounded_rect_gradient(x + 2, y + 2, 92, 92, 18, 0x51C5F5, 0x1672B8);
+    fill_rounded_rect_gradient(x + 5, y + 5, 86, 86, 15, 0x35A8E5, 0x125B9C);
+
     if (explorer) {
-        fill_rect(x + 15, y + 19, 42, 34, 0xF6C95A);
-        fill_rect(x + 15, y + 16, 22, 8, 0xFFE08B);
-        fill_rect(x + 19, y + 28, 34, 21, 0xFFF0C7);
+        fill_rounded_rect_gradient(x + 14, y + 39, 68, 43, 8, 0x9A5B12, 0x623A13);
+        fill_rounded_rect_gradient(x + 19, y + 28, 35, 18, 6, 0xFFE89C, 0xEBAF3B);
+        fill_rounded_rect_gradient(x + 15, y + 34, 66, 43, 8, 0xFFE17A, 0xD98A20);
+        fill_rounded_rect_gradient(x + 22, y + 39, 51, 31, 5, 0xFFFFFF, 0xDDEFFF);
+        fill_rounded_rect_gradient(x + 28, y + 46, 34, 3, 1, 0x91B7D1, 0x6D9AB9);
+        fill_rounded_rect_gradient(x + 28, y + 53, 27, 3, 1, 0xA7C7DA, 0x83ACC5);
+        fill_rounded_rect_gradient(x + 28, y + 60, 31, 3, 1, 0xA7C7DA, 0x83ACC5);
+        fill_rounded_rect_gradient(x + 18, y + 54, 63, 23, 6, 0xFFD66A, 0xE99A2A);
+        fill_rounded_rect_gradient(x + 20, y + 54, 57, 4, 2, 0xFFF0A8, 0xF6C74D);
     } else {
-        fill_rect(x + 14, y + 15, 44, 40, 0xE6F6FF);
-        fill_rect(x + 17, y + 18, 38, 34, 0x4389C5);
-        fill_rect(x + 34, y + 18, 4, 34, 0xE6F6FF);
-        fill_rect(x + 17, y + 33, 38, 4, 0xE6F6FF);
+        fill_rounded_rect_gradient(x + 18, y + 15, 60, 51, 7, 0xE6F8FF, 0x8AC9EA);
+        fill_rounded_rect_gradient(x + 22, y + 19, 52, 41, 4, 0x173E68, 0x0E2D50);
+        fill_rounded_rect_gradient(x + 26, y + 23, 44, 33, 2, 0x6ACAF3, 0x227DBB);
+        fill_rounded_rect_gradient(x + 27, y + 24, 19, 14, 2, 0xC4F4FF, 0x72D2F5);
+        fill_rounded_rect_gradient(x + 50, y + 24, 19, 14, 2, 0x8BE0FF, 0x48ACE4);
+        fill_rounded_rect_gradient(x + 27, y + 41, 19, 14, 2, 0x79D8FA, 0x3F9DD8);
+        fill_rounded_rect_gradient(x + 50, y + 41, 19, 14, 2, 0xB4EEFF, 0x66BFE8);
+        fill_rounded_rect_gradient(x + 42, y + 65, 12, 13, 3, 0xE8F7FF, 0x9ACBE7);
+        fill_rounded_rect_gradient(x + 31, y + 77, 34, 6, 3, 0xF2FBFF, 0x9FCBE3);
     }
 }
 
@@ -295,9 +340,9 @@ static void draw_start_menu() {
     draw_text("开始菜单", 62, static_cast<int>(screen_height) - 574, 1, 0xFFFFFF);
     draw_text("Nova 26H2", 62, static_cast<int>(screen_height) - 536, 1, 0x75D8FF);
     draw_app_icon(66, static_cast<int>(screen_height) - 454, false);
-    draw_text("此电脑", 148, static_cast<int>(screen_height) - 431, 1, 0xFFFFFF);
+    draw_text("此电脑", 174, static_cast<int>(screen_height) - 422, 1, 0xFFFFFF);
     draw_app_icon(66, static_cast<int>(screen_height) - 350, true);
-    draw_text("文件管理", 142, static_cast<int>(screen_height) - 329, 1, 0xFFFFFF);
+    draw_text("文件管理", 174, static_cast<int>(screen_height) - 318, 1, 0xFFFFFF);
 
     draw_start_menu_actions();
 
@@ -370,9 +415,9 @@ static void draw_desktop() {
     draw_wallpaper();
 
     draw_app_icon(54, 62, false);
-    draw_text("此电脑", 54, 143, 1, 0xFFFFFF);
+    draw_text("此电脑", 54, 166, 1, 0xFFFFFF);
     draw_app_icon(54, 218, true);
-    draw_text("文件管理", 42, 299, 1, 0xFFFFFF);
+    draw_text("文件管理", 54, 322, 1, 0xFFFFFF);
 
     fill_rect(0, static_cast<int>(screen_height) - 76, static_cast<int>(screen_width), 76, 0xE8102033);
     fill_rect(0, static_cast<int>(screen_height) - 76, static_cast<int>(screen_width), 1, 0x31506C);

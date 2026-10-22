@@ -4,7 +4,6 @@ git add .
 if errorlevel 1 exit /b 1
 
 set "REMOTE_URL=git@github-second:ZetaUs/Nova-OS-26H2.git"
-set "REMOTE_URL=git@github.com:ZetaUs/Nova-OS-26H2.git"
 git remote get-url origin >nul 2>&1
 if errorlevel 1 (
 	git remote add origin "%REMOTE_URL%"

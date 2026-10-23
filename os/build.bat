@@ -56,7 +56,7 @@ python "%~dp0generate_logo.py" "%ROOT%\image\logo.png" "%OUT%\logo_data.h"
 if errorlevel 1 exit /b 1
 
 echo [7/9] Compiling the freestanding 64-bit kernel with Dev-C++ MinGW...
-"%GXX%" -m64 -std=c++11 -O2 -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit -fno-stack-protector -fno-pic -fno-pie -fno-builtin -fno-asynchronous-unwind-tables -fno-unwind-tables -mno-red-zone -finput-charset=utf-8 -fexec-charset=utf-8 -I"%OUT%" -c "%~dp0kernel.cpp" -o "%OUT%\kernel.o"
+"%GXX%" -m64 -std=c++11 -Os -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit -fno-stack-protector -fno-pic -fno-pie -fno-builtin -fno-asynchronous-unwind-tables -fno-unwind-tables -mno-red-zone -finput-charset=utf-8 -fexec-charset=utf-8 -I"%OUT%" -c "%~dp0kernel.cpp" -o "%OUT%\kernel.o"
 if errorlevel 1 exit /b 1
 
 echo [8/9] Linking and flattening the kernel image...

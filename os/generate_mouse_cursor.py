@@ -107,12 +107,12 @@ def resample_alpha(width, height, pixels):
             bottom_right = sample_alpha(y1, x1)
 
             def lerp(a, b, frac):
-                return (a * (65536 - frac) + b * frac + (1 << 31)) >> 32
+                return (a * (65536 - frac) + b * frac + 32768) >> 16
 
             top_alpha = lerp(top_left, top_right, fraction_x)
             bottom_alpha = lerp(bottom_left, bottom_right, fraction_x)
-            final_alpha = (top_alpha * (65536 - fraction_y) + bottom_alpha * fraction_y + (1 << 31)) >> 32
-            result[output_y * CURSOR_WIDTH + output_x] = min(255, max(0, final_alpha >> 8))
+            final_alpha = lerp(top_alpha, bottom_alpha, fraction_y)
+            result[output_y * CURSOR_WIDTH + output_x] = min(255, max(0, final_alpha))
 
     return result
 
@@ -137,7 +137,10 @@ def main():
     width, height, pixels = decode_png(source_path)
     alpha = resample_alpha(width, height, pixels)
     write_header(output_path, alpha)
-    print(f"Generated {CURSOR_WIDTH}x{CURSOR_HEIGHT} mouse cursor alpha mask from {width}x{height} PNG.")
+    visible_pixels = sum(alpha > 0 for alpha in alpha)
+    if visible_pixels == 0:
+        raise ValueError("Mouse cursor image has no visible pixels.")
+    print(f"Generated {CURSOR_WIDTH}x{CURSOR_HEIGHT} mouse cursor alpha mask ({visible_pixels} visible pixels) from {width}x{height} PNG.")
 
 
 if __name__ == "__main__":

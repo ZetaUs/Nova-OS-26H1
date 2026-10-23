@@ -31,7 +31,7 @@ static bool mouse_cursor_drawn;
 static bool keyboard_extended;
 static uint8_t menu_selection;
 static uint32_t mouse_cursor_background[32 * 40];
-static uint32_t mouse_cursor_sprite[32 * 40];
+static uint8_t mouse_cursor_alpha[32 * 40];
 static const uintptr_t backbuffer_address = 0x01000000;
 
 static inline void copy_to_framebuffer(
@@ -50,14 +50,12 @@ static inline void copy_to_framebuffer(
 static void initialize_mouse_cursor() {
     for (int index = 0; index < MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT; ++index) {
         mouse_cursor_background[index] = 0;
-        mouse_cursor_sprite[index] = 0;
+        mouse_cursor_alpha[index] = 0;
     }
     for (int row = 0; row < MOUSE_CURSOR_HEIGHT; ++row) {
         for (int column = 0; column < MOUSE_CURSOR_WIDTH; ++column) {
             const int index = row * MOUSE_CURSOR_WIDTH + column;
-            const uint8_t alpha = mouse_cursor_alpha[index];
-            if (alpha == 0) continue;
-            mouse_cursor_sprite[index] = 0xFFFFFF;
+            mouse_cursor_alpha[index] = ::mouse_cursor_alpha[index];
         }
     }
 }
@@ -415,23 +413,20 @@ static void draw_nova_mark(int x, int y) {
 }
 
 static void draw_wallpaper() {
+    const uint16_t* wallpaper = reinterpret_cast<const uint16_t*>(0x00020000);
+    const uint32_t row_stride = screen_pitch / 4;
     for (uint32_t y = 0; y < screen_height; ++y) {
-        const uint32_t color = mix_color(0x07172A, 0x102F50, y, screen_height);
-        uint32_t* row = render_target + y * (screen_pitch / 4);
-        for (uint32_t x = 0; x < screen_width; ++x) row[x] = color;
+        uint32_t* row = render_target + y * row_stride;
+        const uint32_t source_y = y * 270 / screen_height;
+        for (uint32_t x = 0; x < screen_width; ++x) {
+            const uint32_t source_x = x * 480 / screen_width;
+            const uint16_t color = wallpaper[source_y * 480 + source_x];
+            const uint32_t red = ((color >> 11) & 31) * 255 / 31;
+            const uint32_t green = ((color >> 5) & 63) * 255 / 63;
+            const uint32_t blue = (color & 31) * 255 / 31;
+            row[x] = (red << 16) | (green << 8) | blue;
+        }
     }
-    draw_triangle(930, 120, 2490, 180, 1880, 1310, 0x0B2947);
-    draw_triangle(1260, 230, 2460, 350, 1890, 1170, 0x0D3558);
-    draw_triangle(1530, 370, 2370, 460, 1940, 1030, 0x10446C);
-    fill_rect(0, 0, static_cast<int>(screen_width), 2, 0x28A9E0);
-
-    const int mark_x = static_cast<int>(screen_width) - 840;
-    const int mark_y = 330;
-    fill_rect(mark_x - 38, mark_y - 38, 556, 556, 0x123D62);
-    fill_rect(mark_x - 31, mark_y - 31, 542, 542, 0x0C2C4A);
-    draw_logo(mark_x, mark_y, 480);
-    draw_text("Nova", mark_x - 14, mark_y + 540, 3, 0xFFFFFF);
-    draw_text("26H2", mark_x + 205, mark_y + 605, 1, 0x92CFF2);
 }
 
 static void draw_start_menu() {
@@ -669,9 +664,9 @@ static void draw_mouse_cursor() {
                                     static_cast<uint32_t>(x);
             const uint32_t background = framebuffer[offset];
             mouse_cursor_background[pixel_index] = background;
-            const uint32_t sprite = mouse_cursor_sprite[pixel_index];
-            if (sprite != 0) {
-                framebuffer[offset] = sprite;
+            const uint8_t alpha = mouse_cursor_alpha[pixel_index];
+            if (alpha != 0) {
+                framebuffer[offset] = mix_color(background, 0xFFFFFF, alpha, 255);
             }
         }
     }

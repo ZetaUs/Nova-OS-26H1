@@ -31,7 +31,7 @@ static bool mouse_cursor_drawn;
 static bool keyboard_extended;
 static uint8_t menu_selection;
 static uint32_t mouse_cursor_background[48 * 60];
-static uint8_t mouse_cursor_mask[48 * 60];
+static uint32_t mouse_cursor_sprite[48 * 60];
 static const uintptr_t backbuffer_address = 0x01000000;
 
 static inline void copy_to_framebuffer(
@@ -49,15 +49,15 @@ static inline void copy_to_framebuffer(
 
 static void initialize_mouse_cursor() {
     for (int index = 0; index < 48 * 60; ++index) {
-        mouse_cursor_mask[index] = 0;
         mouse_cursor_background[index] = 0;
+        mouse_cursor_sprite[index] = 0;
     }
     for (int row = 0; row < MOUSE_CURSOR_HEIGHT; ++row) {
         for (int column = 0; column < MOUSE_CURSOR_WIDTH; ++column) {
             const int index = row * MOUSE_CURSOR_WIDTH + column;
             const uint8_t alpha = mouse_cursor_alpha[index];
             if (alpha == 0) continue;
-            mouse_cursor_mask[index] = alpha;
+            mouse_cursor_sprite[index] = 0xFFFFFF;
         }
     }
 }
@@ -492,22 +492,18 @@ static void refresh_start_menu_actions() {
     present_rect(52, static_cast<int>(screen_height) - 264, 510, 112);
 }
 
+static void draw_desktop();
+
 static void refresh_start_menu() {
     render_target = reinterpret_cast<uint32_t*>(backbuffer_address);
     const int top = static_cast<int>(screen_height) - 618;
     if (start_menu_open) {
         draw_start_menu();
-    } else {
-        const int first_row = top < 0 ? 0 : top;
-        const int last_row = top + 530 > static_cast<int>(screen_height)
-            ? static_cast<int>(screen_height) : top + 530;
-        for (int row = first_row; row < last_row; ++row) {
-            const uint32_t color = mix_color(0x07172A, 0x102F50,
-                                             static_cast<uint32_t>(row), screen_height);
-            fill_rect(24, row, 570, 1, color);
-        }
+        present_rect(24, top, 570, 530);
+        return;
     }
-    present_rect(24, top, 570, 530);
+
+    draw_desktop();
 }
 
 static void draw_desktop() {
@@ -555,50 +551,6 @@ static void out16(uint16_t port, uint16_t value) {
 
 static void out32(uint16_t port, uint32_t value) {
     __asm__ volatile("outl %0, %1" : : "a"(value), "Nd"(port));
-}
-
-static bool cursor_polygon_contains(const int points[][2], int count, int x, int y) {
-    bool inside = false;
-    for (int current = 0, previous = count - 1; current < count; previous = current++) {
-        const int x1 = points[current][0] * 4;
-        const int y1 = points[current][1] * 4;
-        const int x2 = points[previous][0] * 4;
-        const int y2 = points[previous][1] * 4;
-        if ((y1 > y) != (y2 > y)) {
-            const int64_t intersection =
-                static_cast<int64_t>(x2 - x1) * (y - y1) / (y2 - y1) + x1;
-            if (x < intersection) inside = !inside;
-        }
-    }
-    return inside;
-}
-
-static void initialize_mouse_cursor() {
-    const int outline_count =
-        sizeof(mouse_cursor_outline_points) / sizeof(mouse_cursor_outline_points[0]);
-    const int fill_count =
-        sizeof(mouse_cursor_fill_points) / sizeof(mouse_cursor_fill_points[0]);
-    for (int y = 0; y < 60; ++y) {
-        for (int x = 0; x < 48; ++x) {
-            uint8_t outline_coverage = 0;
-            uint8_t fill_coverage = 0;
-            for (int sample_y = 1; sample_y <= 3; sample_y += 2) {
-                for (int sample_x = 1; sample_x <= 3; sample_x += 2) {
-                    if (cursor_polygon_contains(mouse_cursor_outline_points, outline_count,
-                                               x * 4 + sample_x, y * 4 + sample_y)) {
-                        ++outline_coverage;
-                    }
-                    if (cursor_polygon_contains(mouse_cursor_fill_points, fill_count,
-                                               x * 4 + sample_x, y * 4 + sample_y)) {
-                        ++fill_coverage;
-                    }
-                }
-            }
-            const int index = y * 48 + x;
-            mouse_cursor_outline_coverage[index] = outline_coverage;
-            mouse_cursor_fill_coverage[index] = fill_coverage;
-        }
-    }
 }
 
 static uint16_t pit_read_count() {
@@ -717,18 +669,10 @@ static void draw_mouse_cursor() {
                                     static_cast<uint32_t>(x);
             const uint32_t background = framebuffer[offset];
             mouse_cursor_background[pixel_index] = background;
-            const uint8_t outline = mouse_cursor_outline_coverage[pixel_index];
-            const uint8_t fill = mouse_cursor_fill_coverage[pixel_index];
-            uint32_t color = background;
-            if (outline != 0) {
-                color = mix_color(color, 0x00101A26,
-                    static_cast<uint32_t>(outline), 4);
+            const uint32_t sprite = mouse_cursor_sprite[pixel_index];
+            if (sprite != 0) {
+                framebuffer[offset] = sprite;
             }
-            if (fill != 0) {
-                color = mix_color(color, 0x00FFFFFF,
-                    static_cast<uint32_t>(fill), 4);
-            }
-            if (outline != 0 || fill != 0) framebuffer[offset] = color;
         }
     }
     mouse_cursor_drawn = true;
@@ -756,8 +700,8 @@ static void handle_mouse_packet() {
     const uint8_t buttons = flags & 7;
     if ((buttons & 1) != 0 && (mouse_buttons & 1) == 0) {
         const int screen_bottom = static_cast<int>(screen_height);
-        if (start_menu_open && mouse_x >= 52 && mouse_x < 562 &&
-            mouse_y >= screen_bottom - 264 && mouse_y < screen_bottom - 212) {
+            if (start_menu_open && mouse_x >= 52 && mouse_x < 562 &&
+                mouse_y >= screen_bottom - 264 && mouse_y < screen_bottom - 212) {
             restart_system();
         } else if (start_menu_open && mouse_x >= 52 && mouse_x < 562 &&
                    mouse_y >= screen_bottom - 204 && mouse_y < screen_bottom - 152) {

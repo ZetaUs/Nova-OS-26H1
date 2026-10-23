@@ -47,13 +47,20 @@ static inline void copy_to_framebuffer(
     );
 }
 
-static const int mouse_cursor_outline_points[][2] = {
-    {2, 1}, {2, 47}, {13, 36}, {23, 57}, {30, 54}, {20, 33}, {43, 33}
-};
-
-static const int mouse_cursor_fill_points[][2] = {
-    {6, 8}, {6, 40}, {15, 31}, {25, 51}, {27, 49}, {18, 30}, {38, 30}
-};
+static void initialize_mouse_cursor() {
+    for (int index = 0; index < 48 * 60; ++index) {
+        mouse_cursor_mask[index] = 0;
+        mouse_cursor_background[index] = 0;
+    }
+    for (int row = 0; row < MOUSE_CURSOR_HEIGHT; ++row) {
+        for (int column = 0; column < MOUSE_CURSOR_WIDTH; ++column) {
+            const int index = row * MOUSE_CURSOR_WIDTH + column;
+            const uint8_t alpha = mouse_cursor_alpha[index];
+            if (alpha == 0) continue;
+            mouse_cursor_mask[index] = alpha;
+        }
+    }
+}
 
 static const uint32_t logo_colors[16] = {
     0x000000, 0x172554, 0x14532D, 0x155E75,

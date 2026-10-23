@@ -10,6 +10,7 @@ static void pixel(uint16_t x, uint16_t y, uint8_t color);
 static void draw_start_menu_actions();
 
 #include <logo_data.h>
+#include <mouse_cursor_data.h>
 #include "chinese_font.h"
 #include "../HZKX/asc48_map.h"
 #include "ascii_font.h"

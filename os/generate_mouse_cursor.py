@@ -118,6 +118,17 @@ def resample_alpha(width, height, pixels):
 
 
 def write_header(path, alpha):
+    width, height, pixels = decode_png(cursor_source_path)
+    stride = width * 4
+    luma = []
+    for y in range(CURSOR_HEIGHT):
+        source_y = min(height - 1, y * height // CURSOR_HEIGHT)
+        for x in range(CURSOR_WIDTH):
+            source_x = min(width - 1, x * width // CURSOR_WIDTH)
+            offset = source_y * stride + source_x * 4
+            red, green, blue = pixels[offset:offset + 3]
+            luma.append((red * 77 + green * 150 + blue * 29) >> 8)
+
     lines = [
         "#define MOUSE_CURSOR_WIDTH {}".format(CURSOR_WIDTH),
         "#define MOUSE_CURSOR_HEIGHT {}".format(CURSOR_HEIGHT),
@@ -125,6 +136,9 @@ def write_header(path, alpha):
     ]
     for start in range(0, len(alpha), 16):
         lines.append("    " + ", ".join("0x{:02X}".format(value) for value in alpha[start:start + 16]) + ",")
+    lines.extend(("};", "static const uint8_t mouse_cursor_luma[] = {"))
+    for start in range(0, len(luma), 16):
+        lines.append("    " + ", ".join("0x{:02X}".format(value) for value in luma[start:start + 16]) + ",")
     lines.extend(("};", ""))
     path.write_text("\n".join(lines), encoding="ascii")
 
@@ -133,11 +147,12 @@ def main():
     if len(sys.argv) != 3:
         raise SystemExit("Usage: generate_mouse_cursor.py mouse.png output.h")
 
-    source_path, output_path = map(Path, sys.argv[1:])
-    width, height, pixels = decode_png(source_path)
+    global cursor_source_path
+    cursor_source_path, output_path = map(Path, sys.argv[1:])
+    width, height, pixels = decode_png(cursor_source_path)
     alpha = resample_alpha(width, height, pixels)
     write_header(output_path, alpha)
-    visible_pixels = sum(alpha > 0 for alpha in alpha)
+    visible_pixels = sum(value > 0 for value in alpha)
     if visible_pixels == 0:
         raise ValueError("Mouse cursor image has no visible pixels.")
     print(f"Generated {CURSOR_WIDTH}x{CURSOR_HEIGHT} mouse cursor alpha mask ({visible_pixels} visible pixels) from {width}x{height} PNG.")

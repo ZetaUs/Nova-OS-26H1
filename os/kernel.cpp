@@ -31,7 +31,7 @@ static bool mouse_cursor_drawn;
 static bool keyboard_extended;
 static uint8_t menu_selection;
 static uint32_t mouse_cursor_background[32 * 40];
-static uint8_t mouse_cursor_alpha[32 * 40];
+static uint8_t mouse_cursor_coverage[32 * 40];
 static const uintptr_t backbuffer_address = 0x01000000;
 
 static inline void copy_to_framebuffer(
@@ -50,12 +50,12 @@ static inline void copy_to_framebuffer(
 static void initialize_mouse_cursor() {
     for (int index = 0; index < MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT; ++index) {
         mouse_cursor_background[index] = 0;
-        mouse_cursor_alpha[index] = 0;
+        mouse_cursor_coverage[index] = 0;
     }
     for (int row = 0; row < MOUSE_CURSOR_HEIGHT; ++row) {
         for (int column = 0; column < MOUSE_CURSOR_WIDTH; ++column) {
             const int index = row * MOUSE_CURSOR_WIDTH + column;
-            mouse_cursor_alpha[index] = ::mouse_cursor_alpha[index];
+            mouse_cursor_coverage[index] = mouse_cursor_alpha[index];
         }
     }
 }
@@ -664,7 +664,7 @@ static void draw_mouse_cursor() {
                                     static_cast<uint32_t>(x);
             const uint32_t background = framebuffer[offset];
             mouse_cursor_background[pixel_index] = background;
-            const uint8_t alpha = mouse_cursor_alpha[pixel_index];
+            const uint8_t alpha = mouse_cursor_coverage[pixel_index];
             if (alpha != 0) {
                 framebuffer[offset] = mix_color(background, 0xFFFFFF, alpha, 255);
             }

@@ -3,8 +3,8 @@ import sys
 import zlib
 from pathlib import Path
 
-CURSOR_WIDTH = 48
-CURSOR_HEIGHT = 60
+CURSOR_WIDTH = 32
+CURSOR_HEIGHT = 40
 
 
 def decode_png(path):
@@ -81,7 +81,7 @@ def decode_png(path):
 
 
 def resample_alpha(width, height, pixels):
-    result = bytearray(CURSOR_WIDTH * CURSOR_HEIGHT)
+    result = [0] * (CURSOR_WIDTH * CURSOR_HEIGHT)
     source_stride = width * 4
 
     for output_y in range(CURSOR_HEIGHT):
@@ -98,15 +98,21 @@ def resample_alpha(width, height, pixels):
             x0 = max(0, min(width - 1, source_x))
             x1 = max(0, min(width - 1, source_x + 1))
 
-            top_left = pixels[y0 * source_stride + x0 * 4 + 3]
-            top_right = pixels[y0 * source_stride + x1 * 4 + 3]
-            bottom_left = pixels[y1 * source_stride + x0 * 4 + 3]
-            bottom_right = pixels[y1 * source_stride + x1 * 4 + 3]
+            def sample_alpha(y_index, x_index):
+                return pixels[y_index * source_stride + x_index * 4 + 3]
 
-            top = top_left * (65536 - fraction_x) + top_right * fraction_x
-            bottom = bottom_left * (65536 - fraction_x) + bottom_right * fraction_x
-            alpha = (top * (65536 - fraction_y) + bottom * fraction_y + (1 << 31)) >> 32
-            result[output_y * CURSOR_WIDTH + output_x] = min(255, max(0, (alpha + 128) >> 8))
+            top_left = sample_alpha(y0, x0)
+            top_right = sample_alpha(y0, x1)
+            bottom_left = sample_alpha(y1, x0)
+            bottom_right = sample_alpha(y1, x1)
+
+            def lerp(a, b, frac):
+                return (a * (65536 - frac) + b * frac + (1 << 31)) >> 32
+
+            top_alpha = lerp(top_left, top_right, fraction_x)
+            bottom_alpha = lerp(bottom_left, bottom_right, fraction_x)
+            final_alpha = (top_alpha * (65536 - fraction_y) + bottom_alpha * fraction_y + (1 << 31)) >> 32
+            result[output_y * CURSOR_WIDTH + output_x] = min(255, max(0, final_alpha >> 8))
 
     return result
 

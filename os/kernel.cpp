@@ -48,7 +48,7 @@ static inline void copy_to_framebuffer(
 }
 
 static void initialize_mouse_cursor() {
-    for (int index = 0; index < 48 * 60; ++index) {
+    for (int index = 0; index < MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT; ++index) {
         mouse_cursor_background[index] = 0;
         mouse_cursor_sprite[index] = 0;
     }
@@ -644,27 +644,27 @@ static bool initialize_mouse() {
 static void restore_mouse_cursor() {
     if (!mouse_cursor_drawn) return;
 
-    for (int row = 0; row < 60; ++row) {
+    for (int row = 0; row < MOUSE_CURSOR_HEIGHT; ++row) {
         const int y = mouse_y + row;
         if (y < 0 || y >= static_cast<int>(screen_height)) continue;
-        for (int column = 0; column < 48; ++column) {
+        for (int column = 0; column < MOUSE_CURSOR_WIDTH; ++column) {
             const int x = mouse_x + column;
             if (x < 0 || x >= static_cast<int>(screen_width)) continue;
             framebuffer[static_cast<uint32_t>(y) * (screen_pitch / 4) +
-                        static_cast<uint32_t>(x)] = mouse_cursor_background[row * 48 + column];
+                        static_cast<uint32_t>(x)] = mouse_cursor_background[row * MOUSE_CURSOR_WIDTH + column];
         }
     }
     mouse_cursor_drawn = false;
 }
 
 static void draw_mouse_cursor() {
-    for (int row = 0; row < 60; ++row) {
+    for (int row = 0; row < MOUSE_CURSOR_HEIGHT; ++row) {
         const int y = mouse_y + row;
         if (y < 0 || y >= static_cast<int>(screen_height)) continue;
-        for (int column = 0; column < 48; ++column) {
+        for (int column = 0; column < MOUSE_CURSOR_WIDTH; ++column) {
             const int x = mouse_x + column;
             if (x < 0 || x >= static_cast<int>(screen_width)) continue;
-            const int pixel_index = row * 48 + column;
+            const int pixel_index = row * MOUSE_CURSOR_WIDTH + column;
             const uint32_t offset = static_cast<uint32_t>(y) * (screen_pitch / 4) +
                                     static_cast<uint32_t>(x);
             const uint32_t background = framebuffer[offset];

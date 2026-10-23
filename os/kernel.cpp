@@ -834,8 +834,11 @@ extern "C" __attribute__((noreturn)) void kernel_main(
                     refresh_start_menu_actions();
                     draw_mouse_cursor();
                 } else if (!extended && start_menu_open && scan_code == 0x1C) {
-                    if (menu_selection == 0) restart_system();
-                    shutdown_system();
+                    if (menu_selection == 0) {
+                        restart_system();
+                    } else {
+                        shutdown_system();
+                    }
                 } else if (scan_code == 0x01 && start_menu_open) {
                     restore_mouse_cursor();
                     start_menu_open = false;

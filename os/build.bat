@@ -31,6 +31,10 @@ set "LD=%DEVCPP_BIN%\ld.exe"
 set "OBJCOPY=%DEVCPP_BIN%\objcopy.exe"
 if not exist "%OUT%" mkdir "%OUT%"
 
+echo [1.5/9] Preparing the default Nova wallpaper...
+python "%~dp0generate_wallpaper.py" "%ROOT%\image\Wallpaper\img0.png" "%OUT%\wallpaper.rgb565"
+if errorlevel 1 exit /b 1
+
 echo [1/9] Assembling BIOS boot sector...
 "%NASM%" -f bin "%~dp0boot.asm" -o "%OUT%\boot.bin"
 if errorlevel 1 exit /b 1
@@ -83,7 +87,7 @@ for %%F in ("%OUT%\kernel.bin") do if %%~zF GTR 49152 (
 )
 
 echo [9/9] Creating the 64 MiB BIOS disk image...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { $boot=[System.IO.File]::ReadAllBytes('%OUT%\boot.bin'); $stage2=[System.IO.File]::ReadAllBytes('%OUT%\stage2.bin'); $kernel=[System.IO.File]::ReadAllBytes('%OUT%\kernel.bin'); $img=New-Object byte[] (64*1024*1024); $boot.CopyTo($img,0); $stage2.CopyTo($img,512); $kernel.CopyTo($img,9*512); [System.IO.File]::WriteAllBytes('%OUT%\nova-os-26h2.img',$img) } catch { Write-Error $_; exit 1 }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { $boot=[System.IO.File]::ReadAllBytes('%OUT%\boot.bin'); $stage2=[System.IO.File]::ReadAllBytes('%OUT%\stage2.bin'); $kernel=[System.IO.File]::ReadAllBytes('%OUT%\kernel.bin'); $wallpaper=[System.IO.File]::ReadAllBytes('%OUT%\wallpaper.rgb565'); if ($wallpaper.Length -ne 259200) { throw 'Wallpaper image must contain exactly 259200 bytes.' }; $img=New-Object byte[] (64*1024*1024); $boot.CopyTo($img,0); $stage2.CopyTo($img,512); $kernel.CopyTo($img,9*512); $wallpaper.CopyTo($img,105*512); [System.IO.File]::WriteAllBytes('%OUT%\nova-os-26h2.img',$img) } catch { Write-Error $_; exit 1 }"
 if errorlevel 1 exit /b 1
 
 echo Built 64-bit Nova OS 26H2: %OUT%\nova-os-26h2.img

@@ -3,8 +3,8 @@ import sys
 import zlib
 from pathlib import Path
 
-CURSOR_WIDTH = 32
-CURSOR_HEIGHT = 40
+CURSOR_WIDTH = 24
+CURSOR_HEIGHT = 36
 
 
 def decode_png(path):
@@ -117,8 +117,7 @@ def resample_alpha(width, height, pixels):
     return result
 
 
-def write_header(path, alpha):
-    width, height, pixels = decode_png(cursor_source_path)
+def write_header(path, alpha, width, height, pixels):
     stride = width * 4
     luma = []
     for y in range(CURSOR_HEIGHT):
@@ -147,11 +146,10 @@ def main():
     if len(sys.argv) != 3:
         raise SystemExit("Usage: generate_mouse_cursor.py mouse.png output.h")
 
-    global cursor_source_path
-    cursor_source_path, output_path = map(Path, sys.argv[1:])
-    width, height, pixels = decode_png(cursor_source_path)
+    source_path, output_path = map(Path, sys.argv[1:])
+    width, height, pixels = decode_png(source_path)
     alpha = resample_alpha(width, height, pixels)
-    write_header(output_path, alpha)
+    write_header(output_path, alpha, width, height, pixels)
     visible_pixels = sum(value > 0 for value in alpha)
     if visible_pixels == 0:
         raise ValueError("Mouse cursor image has no visible pixels.")

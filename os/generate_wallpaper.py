@@ -33,10 +33,11 @@ def decode_png(path):
         elif chunk_type == b"IEND":
             break
 
-    if bit_depth != 8 or color_type != 6:
-        raise ValueError("Wallpaper PNG must be 8-bit RGBA.")
+    if bit_depth != 8 or color_type not in (2, 6):
+        raise ValueError("Wallpaper PNG must be 8-bit RGB or RGBA.")
 
-    stride = width * 4
+    bytes_per_pixel = 4 if color_type == 6 else 3
+    stride = width * bytes_per_pixel
     decoded = zlib.decompress(compressed)
     pixels = bytearray(height * stride)
     source_offset = 0
@@ -49,9 +50,9 @@ def decode_png(path):
         source_offset += stride
 
         for index in range(stride):
-            left = row[index - 4] if index >= 4 else 0
+            left = row[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
             above = previous_row[index]
-            upper_left = previous_row[index - 4] if index >= 4 else 0
+            upper_left = previous_row[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
 
             if filter_type == 1:
                 predictor = left
@@ -80,12 +81,14 @@ def decode_png(path):
 
     if source_offset != len(decoded):
         raise ValueError("Wallpaper PNG image data has an unexpected size.")
-    return width, height, pixels
+    return width, height, pixels, bytes_per_pixel
 
 
-def bilinear_channel(pixels, stride, channel, x0, x1, y0, y1, fx, fy):
+def bilinear_channel(pixels, stride, bytes_per_pixel, channel, x0, x1, y0, y1, fx, fy):
     def sample(x, y):
-        return pixels[y * stride + x * 4 + channel]
+        if channel == 3 and bytes_per_pixel == 3:
+            return 255
+        return pixels[y * stride + x * bytes_per_pixel + channel]
 
     top = sample(x0, y0) * (65536 - fx) + sample(x1, y0) * fx
     bottom = sample(x0, y1) * (65536 - fx) + sample(x1, y1) * fx
@@ -94,8 +97,8 @@ def bilinear_channel(pixels, stride, channel, x0, x1, y0, y1, fx, fy):
     return (top * (65536 - fy) + bottom * fy + 32768) >> 16
 
 
-def generate_rgb565(width, height, pixels):
-    source_stride = width * 4
+def generate_rgb565(width, height, pixels, bytes_per_pixel):
+    source_stride = width * bytes_per_pixel
     output = bytearray(OUTPUT_WIDTH * OUTPUT_HEIGHT * 2)
 
     for output_y in range(OUTPUT_HEIGHT):
@@ -112,10 +115,10 @@ def generate_rgb565(width, height, pixels):
             x0 = max(0, min(width - 1, source_x))
             x1 = max(0, min(width - 1, source_x + 1))
 
-            alpha = bilinear_channel(pixels, source_stride, 3, x0, x1, y0, y1, fx, fy)
-            red = bilinear_channel(pixels, source_stride, 0, x0, x1, y0, y1, fx, fy)
-            green = bilinear_channel(pixels, source_stride, 1, x0, x1, y0, y1, fx, fy)
-            blue = bilinear_channel(pixels, source_stride, 2, x0, x1, y0, y1, fx, fy)
+            alpha = bilinear_channel(pixels, source_stride, bytes_per_pixel, 3, x0, x1, y0, y1, fx, fy)
+            red = bilinear_channel(pixels, source_stride, bytes_per_pixel, 0, x0, x1, y0, y1, fx, fy)
+            green = bilinear_channel(pixels, source_stride, bytes_per_pixel, 1, x0, x1, y0, y1, fx, fy)
+            blue = bilinear_channel(pixels, source_stride, bytes_per_pixel, 2, x0, x1, y0, y1, fx, fy)
             red = (red * alpha + 10 * (255 - alpha) + 127) // 255
             green = (green * alpha + 18 * (255 - alpha) + 127) // 255
             blue = (blue * alpha + 32 * (255 - alpha) + 127) // 255
@@ -133,8 +136,8 @@ def main():
         raise SystemExit("Usage: generate_wallpaper.py wallpaper.png output.rgb565")
 
     source_path, output_path = map(Path, sys.argv[1:])
-    width, height, pixels = decode_png(source_path)
-    wallpaper = generate_rgb565(width, height, pixels)
+    width, height, pixels, bytes_per_pixel = decode_png(source_path)
+    wallpaper = generate_rgb565(width, height, pixels, bytes_per_pixel)
     output_path.write_bytes(wallpaper)
     print(
         f"Generated {OUTPUT_WIDTH}x{OUTPUT_HEIGHT} RGB565 wallpaper "

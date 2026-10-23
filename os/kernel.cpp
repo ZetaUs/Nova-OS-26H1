@@ -30,8 +30,9 @@ static uint8_t mouse_buttons;
 static bool mouse_cursor_drawn;
 static bool keyboard_extended;
 static uint8_t menu_selection;
-static uint32_t mouse_cursor_background[32 * 40];
-static uint8_t mouse_cursor_coverage[32 * 40];
+static uint32_t mouse_cursor_background[24 * 36];
+static uint8_t mouse_cursor_coverage[24 * 36];
+static uint8_t mouse_cursor_shade[24 * 36];
 static const uintptr_t backbuffer_address = 0x01000000;
 
 static inline void copy_to_framebuffer(
@@ -51,11 +52,13 @@ static void initialize_mouse_cursor() {
     for (int index = 0; index < MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT; ++index) {
         mouse_cursor_background[index] = 0;
         mouse_cursor_coverage[index] = 0;
+        mouse_cursor_shade[index] = 0;
     }
     for (int row = 0; row < MOUSE_CURSOR_HEIGHT; ++row) {
         for (int column = 0; column < MOUSE_CURSOR_WIDTH; ++column) {
             const int index = row * MOUSE_CURSOR_WIDTH + column;
             mouse_cursor_coverage[index] = mouse_cursor_alpha[index];
+            mouse_cursor_shade[index] = mouse_cursor_luma[index];
         }
     }
 }
@@ -417,13 +420,16 @@ static void draw_wallpaper() {
     const uint32_t row_stride = screen_pitch / 4;
     for (uint32_t y = 0; y < screen_height; ++y) {
         uint32_t* row = render_target + y * row_stride;
-        const uint32_t source_y = y * 270 / screen_height;
+        const uint32_t source_y = y >> 2;
         for (uint32_t x = 0; x < screen_width; ++x) {
-            const uint32_t source_x = x * 480 / screen_width;
+            const uint32_t source_x = x >> 2;
             const uint16_t color = wallpaper[source_y * 480 + source_x];
-            const uint32_t red = ((color >> 11) & 31) * 255 / 31;
-            const uint32_t green = ((color >> 5) & 63) * 255 / 63;
-            const uint32_t blue = (color & 31) * 255 / 31;
+            const uint32_t red5 = (color >> 11) & 31;
+            const uint32_t green6 = (color >> 5) & 63;
+            const uint32_t blue5 = color & 31;
+            const uint32_t red = (red5 << 3) | (red5 >> 2);
+            const uint32_t green = (green6 << 2) | (green6 >> 4);
+            const uint32_t blue = (blue5 << 3) | (blue5 >> 2);
             row[x] = (red << 16) | (green << 8) | blue;
         }
     }
@@ -666,7 +672,9 @@ static void draw_mouse_cursor() {
             mouse_cursor_background[pixel_index] = background;
             const uint8_t alpha = mouse_cursor_coverage[pixel_index];
             if (alpha != 0) {
-                framebuffer[offset] = mix_color(background, 0xFFFFFF, alpha, 255);
+                const uint32_t shade = mouse_cursor_shade[pixel_index];
+                const uint32_t color = (shade << 16) | (shade << 8) | shade;
+                framebuffer[offset] = mix_color(background, color, alpha, 255);
             }
         }
     }

@@ -31,8 +31,7 @@ static bool mouse_cursor_drawn;
 static bool keyboard_extended;
 static uint8_t menu_selection;
 static uint32_t mouse_cursor_background[48 * 60];
-static uint8_t mouse_cursor_outline_coverage[48 * 60];
-static uint8_t mouse_cursor_fill_coverage[48 * 60];
+static uint8_t mouse_cursor_mask[48 * 60];
 static const uintptr_t backbuffer_address = 0x01000000;
 
 static inline void copy_to_framebuffer(

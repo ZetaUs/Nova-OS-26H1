@@ -48,11 +48,11 @@ static inline void copy_to_framebuffer(
 }
 
 static const int mouse_cursor_outline_points[][2] = {
-    {1, 1}, {1, 51}, {13, 39}, {23, 59}, {32, 55}, {23, 36}, {45, 36}
+    {2, 1}, {2, 47}, {13, 36}, {23, 57}, {30, 54}, {20, 33}, {43, 33}
 };
 
 static const int mouse_cursor_fill_points[][2] = {
-    {5, 9}, {5, 41}, {16, 30}, {26, 51}, {28, 49}, {19, 31}, {38, 31}
+    {6, 8}, {6, 40}, {15, 31}, {25, 51}, {27, 49}, {18, 30}, {38, 30}
 };
 
 static const uint32_t logo_colors[16] = {
@@ -424,7 +424,7 @@ static void draw_wallpaper() {
     fill_rect(mark_x - 31, mark_y - 31, 542, 542, 0x0C2C4A);
     draw_logo(mark_x, mark_y, 480);
     draw_text("Nova", mark_x - 14, mark_y + 540, 3, 0xFFFFFF);
-    draw_text("2026 下半年版", mark_x + 48, mark_y + 605, 1, 0x92CFF2);
+    draw_text("26H2", mark_x + 205, mark_y + 605, 1, 0x92CFF2);
 }
 
 static void draw_start_menu() {
@@ -619,7 +619,7 @@ static void draw_loading_screen() {
     const int center_y = static_cast<int>(screen_height / 2);
     draw_logo(center_x - 160, center_y - 230, 320);
     draw_text("Nova", center_x - 108, center_y + 110, 3, 0xFFFFFF);
-    draw_text("2026 下半年版", center_x - 132, center_y + 182, 1, 0x92CFF2);
+    draw_text("26H2", center_x - 40, center_y + 182, 1, 0x92CFF2);
     draw_text("正在启动", center_x - 96, center_y + 226, 1, 0xCBD5E1);
 
     const int progress_x = center_x - 180;

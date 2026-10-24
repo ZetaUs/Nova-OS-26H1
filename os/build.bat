@@ -63,6 +63,14 @@ echo [6.5/9] Generating the mouse cursor sprite...
 python "%~dp0generate_mouse_cursor.py" "%ROOT%\image\mouse.png" "%OUT%\mouse_cursor_data.h"
 if errorlevel 1 exit /b 1
 
+echo [6.8/10] Assembling the bundled ZEX applications...
+for %%A in (filemgr notepad browser settings terminal) do (
+  "%NASM%" -f bin "%ROOT%\RUN\ZEX\%%A.asm" -o "%OUT%\%%A.zex"
+  if errorlevel 1 exit /b 1
+)
+python "%~dp0generate_zex_apps.py" "%OUT%" "%OUT%\zex_apps.h"
+if errorlevel 1 exit /b 1
+
 echo [7/9] Compiling the freestanding 64-bit kernel with Dev-C++ MinGW...
 "%GXX%" -m64 -std=c++11 -Os -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit -fno-stack-protector -fno-pic -fno-pie -fno-builtin -fno-asynchronous-unwind-tables -fno-unwind-tables -mno-red-zone -finput-charset=utf-8 -fexec-charset=utf-8 -I"%OUT%" -c "%~dp0kernel.cpp" -o "%OUT%\kernel.o"
 if errorlevel 1 exit /b 1
@@ -81,13 +89,13 @@ for %%F in ("%OUT%\stage2.bin") do if %%~zF GTR 4096 (
   echo Stage two exceeds its 8-sector limit: %%~zF bytes.
   exit /b 1
 )
-for %%F in ("%OUT%\kernel.bin") do if %%~zF GTR 49152 (
-  echo Kernel exceeds its 96-sector BIOS loading limit: %%~zF bytes.
+for %%F in ("%OUT%\kernel.bin") do if %%~zF GTR 65024 (
+  echo Kernel exceeds its 127-sector BIOS loading limit: %%~zF bytes.
   exit /b 1
 )
 
 echo [9/9] Creating the 64 MiB BIOS disk image...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { $boot=[System.IO.File]::ReadAllBytes('%OUT%\boot.bin'); $stage2=[System.IO.File]::ReadAllBytes('%OUT%\stage2.bin'); $kernel=[System.IO.File]::ReadAllBytes('%OUT%\kernel.bin'); $wallpaper=[System.IO.File]::ReadAllBytes('%OUT%\wallpaper.rgb565'); if ($wallpaper.Length -ne 508032) { throw 'Wallpaper image must contain exactly 508032 bytes.' }; $img=New-Object byte[] (64*1024*1024); $boot.CopyTo($img,0); $stage2.CopyTo($img,512); $kernel.CopyTo($img,9*512); $wallpaper.CopyTo($img,105*512); [System.IO.File]::WriteAllBytes('%OUT%\nova-os-26h2.img',$img) } catch { Write-Error $_; exit 1 }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { $boot=[System.IO.File]::ReadAllBytes('%OUT%\boot.bin'); $stage2=[System.IO.File]::ReadAllBytes('%OUT%\stage2.bin'); $kernel=[System.IO.File]::ReadAllBytes('%OUT%\kernel.bin'); $wallpaper=[System.IO.File]::ReadAllBytes('%OUT%\wallpaper.rgb565'); if ($wallpaper.Length -ne 508032) { throw 'Wallpaper image must contain exactly 508032 bytes.' }; $img=New-Object byte[] (64*1024*1024); $boot.CopyTo($img,0); $stage2.CopyTo($img,512); $kernel.CopyTo($img,9*512); $wallpaper.CopyTo($img,136*512); [System.IO.File]::WriteAllBytes('%OUT%\nova-os-26h2.img',$img) } catch { Write-Error $_; exit 1 }"
 if errorlevel 1 exit /b 1
 
 echo Built 64-bit Nova OS 26H2: %OUT%\nova-os-26h2.img

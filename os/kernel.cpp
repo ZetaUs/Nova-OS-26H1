@@ -2,15 +2,19 @@ typedef unsigned char uint8_t;
 typedef signed char int8_t;
 typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
+typedef unsigned long long uint64_t;
 typedef signed long long int64_t;
 typedef unsigned long long uintptr_t;
 
 static void put_pixel(int x, int y, uint32_t color);
 static void pixel(uint16_t x, uint16_t y, uint8_t color);
 static void draw_start_menu_actions();
+static void restore_mouse_cursor();
+static void draw_mouse_cursor();
 
 #include <logo_data.h>
 #include <mouse_cursor_data.h>
+#include <zex_apps.h>
 #include "chinese_font.h"
 #include "../HZKX/asc48_map.h"
 #include "ascii_font.h"
@@ -34,6 +38,59 @@ static uint32_t mouse_cursor_background[MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT
 static uint8_t mouse_cursor_coverage[MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT];
 static uint8_t mouse_cursor_shade[MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT];
 static const uintptr_t backbuffer_address = 0x01000000;
+static const uintptr_t zex_load_address = 0x00400000;
+
+struct ZexRegisterFrame {
+    uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
+    uint64_t rdi, rsi, rbp, rdx, rcx, rbx, rax;
+    uint64_t rip, cs, rflags;
+};
+
+struct ZexIdtEntry {
+    uint16_t offset_low;
+    uint16_t selector;
+    uint8_t ist;
+    uint8_t attributes;
+    uint16_t offset_middle;
+    uint32_t offset_high;
+    uint32_t reserved;
+} __attribute__((packed));
+
+struct ZexIdtr {
+    uint16_t limit;
+    uint64_t base;
+} __attribute__((packed));
+
+struct ZexProgram {
+    const uint8_t* image;
+    uint32_t image_size;
+};
+
+struct ZexRuntime {
+    bool running;
+    bool window_open;
+    uint32_t code_end;
+    uint32_t data_start;
+    uint32_t data_end;
+    int window_width;
+    int window_height;
+    char title[64];
+    char message[128];
+};
+
+static ZexIdtEntry zex_idt[256];
+static ZexRuntime zex_runtime;
+static const ZexProgram zex_programs[] = {
+    { zex_filemgr, zex_filemgr_size },
+    { zex_notepad, zex_notepad_size },
+    { zex_browser, zex_browser_size },
+    { zex_settings, zex_settings_size },
+    { zex_terminal, zex_terminal_size }
+};
+
+extern "C" void zex_interrupt_handler();
+extern "C" void zex_exit_trampoline();
+extern "C" void zex_syscall_dispatch(ZexRegisterFrame* registers);
 
 static inline void copy_to_framebuffer(
     volatile uint32_t* destination,
@@ -536,6 +593,39 @@ static void draw_desktop() {
     present_backbuffer();
 }
 
+static void draw_zex_window() {
+    if (!zex_runtime.window_open) return;
+
+    const int x = (static_cast<int>(screen_width) - zex_runtime.window_width) / 2;
+    const int y = (static_cast<int>(screen_height) - zex_runtime.window_height) / 2;
+    fill_rounded_rect_gradient(
+        x, y, zex_runtime.window_width, zex_runtime.window_height, 12,
+        0x123451, 0x09192A
+    );
+    fill_rounded_rect_gradient(
+        x + 2, y + 2, zex_runtime.window_width - 4, zex_runtime.window_height - 4, 10,
+        0x203D5A, 0x10253B
+    );
+    fill_rounded_rect_gradient(
+        x + 4, y + 4, zex_runtime.window_width - 8, 42, 8,
+        0x28618C, 0x17466D
+    );
+    fill_rect(x + 4, y + 34, zex_runtime.window_width - 8, 12, 0x17466D);
+    draw_text(zex_runtime.title, x + 22, y + 15, 1, 0xFFFFFF);
+    fill_rounded_rect_gradient(
+        x + zex_runtime.window_width - 42, y + 10, 26, 24, 6,
+        0xA84453, 0x782B3C
+    );
+    draw_text("X", x + zex_runtime.window_width - 34, y + 12, 1, 0xFFFFFF);
+    fill_rounded_rect_gradient(
+        x + 20, y + 64, zex_runtime.window_width - 40,
+        zex_runtime.window_height - 84, 8, 0x152C43, 0x0D1C2C
+    );
+    draw_text(zex_runtime.message, x + 38, y + 90, 1, 0xE3EDF7);
+    draw_text("按任意键关闭", x + 24, y + zex_runtime.window_height - 42, 1, 0x9BB1C8);
+    present_backbuffer();
+}
+
 static uint8_t in8(uint16_t port) {
     uint8_t value;
     __asm__ volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
@@ -552,6 +642,224 @@ static void out16(uint16_t port, uint16_t value) {
 
 static void out32(uint16_t port, uint32_t value) {
     __asm__ volatile("outl %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static void install_zex_syscall_gate() {
+    const uintptr_t handler = reinterpret_cast<uintptr_t>(&zex_interrupt_handler);
+    ZexIdtEntry& gate = zex_idt[0x80];
+    gate.offset_low = static_cast<uint16_t>(handler);
+    gate.selector = 0x18;
+    gate.ist = 0;
+    gate.attributes = 0x8E;
+    gate.offset_middle = static_cast<uint16_t>(handler >> 16);
+    gate.offset_high = static_cast<uint32_t>(handler >> 32);
+    gate.reserved = 0;
+
+    const ZexIdtr descriptor = {
+        static_cast<uint16_t>(sizeof(zex_idt) - 1),
+        reinterpret_cast<uintptr_t>(zex_idt)
+    };
+    __asm__ volatile("lidt %0" : : "m"(descriptor));
+}
+
+static uint16_t read_zex_u16(const uint8_t* image, uint32_t offset) {
+    return static_cast<uint16_t>(image[offset]) |
+           (static_cast<uint16_t>(image[offset + 1]) << 8);
+}
+
+static uint64_t read_zex_u64(const uint8_t* image, uint32_t offset) {
+    uint64_t value = 0;
+    for (uint32_t byte = 0; byte < 8; ++byte) {
+        value |= static_cast<uint64_t>(image[offset + byte]) << (byte * 8);
+    }
+    return value;
+}
+
+static bool copy_zex_string(uint64_t address, char* destination, uint32_t capacity) {
+    if (capacity == 0 || address < zex_runtime.data_start ||
+        address >= zex_runtime.data_end) {
+        return false;
+    }
+
+    const char* source = reinterpret_cast<const char*>(
+        static_cast<uintptr_t>(address)
+    );
+    const uint32_t available = zex_runtime.data_end - static_cast<uint32_t>(address);
+    const uint32_t limit = available < capacity ? available : capacity;
+    for (uint32_t index = 0; index < limit; ++index) {
+        destination[index] = source[index];
+        if (source[index] == '\0') return true;
+    }
+    destination[capacity - 1] = '\0';
+    return false;
+}
+
+static bool load_zex_program(const ZexProgram& program, uint64_t& entry) {
+    const uint32_t header_size = 36;
+    if (program.image == 0 || program.image_size < header_size) return false;
+    if (read_zex_u16(program.image, 0) != 0x575A ||
+        read_zex_u16(program.image, 2) != 2) {
+        return false;
+    }
+
+    entry = read_zex_u64(program.image, 4);
+    const uint64_t code_size = read_zex_u64(program.image, 12);
+    const uint64_t data_size = read_zex_u64(program.image, 20);
+    const uint64_t bss_size = read_zex_u64(program.image, 28);
+    const uint64_t image_size = header_size + code_size + data_size;
+    const uint64_t total_size = image_size + bss_size;
+    if (code_size == 0 || image_size != program.image_size ||
+        total_size > 256 * 1024 ||
+        entry < zex_load_address + header_size ||
+        entry >= zex_load_address + header_size + code_size) {
+        return false;
+    }
+
+    uint8_t* const image = reinterpret_cast<uint8_t*>(zex_load_address);
+    for (uint32_t offset = 0; offset < program.image_size; ++offset) {
+        image[offset] = program.image[offset];
+    }
+    zex_runtime.code_end = static_cast<uint32_t>(
+        zex_load_address + header_size + code_size
+    );
+    zex_runtime.data_start = zex_runtime.code_end;
+    zex_runtime.data_end = static_cast<uint32_t>(
+        zex_runtime.data_start + data_size
+    );
+    for (uint32_t offset = header_size; offset + 1 < zex_runtime.code_end -
+         zex_load_address; ++offset) {
+        if (image[offset] == 0x0F && image[offset + 1] == 0x05) {
+            image[offset] = 0xCD;
+            image[offset + 1] = 0x80;
+            ++offset;
+        }
+    }
+    for (uint32_t offset = static_cast<uint32_t>(image_size);
+         offset < static_cast<uint32_t>(total_size); ++offset) {
+        image[offset] = 0;
+    }
+    return true;
+}
+
+static void wait_for_zex_key() {
+    for (;;) {
+        if ((in8(0x64) & 1) == 0) {
+            __asm__ volatile("pause");
+            continue;
+        }
+        const uint8_t status = in8(0x64);
+        const uint8_t scan_code = in8(0x60);
+        if ((status & 0x20) == 0 && scan_code != 0xE0 &&
+            (scan_code & 0x80) == 0) {
+            return;
+        }
+    }
+}
+
+static void copy_zex_literal(char* destination, uint32_t capacity, const char* source) {
+    uint32_t index = 0;
+    while (index + 1 < capacity && source[index] != '\0') {
+        destination[index] = source[index];
+        ++index;
+    }
+    destination[index] = '\0';
+}
+
+static void show_zex_load_error() {
+    zex_runtime.window_open = true;
+    zex_runtime.window_width = 520;
+    zex_runtime.window_height = 240;
+    copy_zex_literal(zex_runtime.title, sizeof(zex_runtime.title), "程序加载失败");
+    copy_zex_literal(zex_runtime.message, sizeof(zex_runtime.message), "ZEX程序数据无效");
+    mouse_cursor_drawn = false;
+    draw_desktop();
+    draw_zex_window();
+    draw_mouse_cursor();
+    wait_for_zex_key();
+    zex_runtime.window_open = false;
+    draw_desktop();
+    draw_mouse_cursor();
+}
+
+static void run_zex_program(uint32_t program_index) {
+    if (program_index >= sizeof(zex_programs) / sizeof(zex_programs[0])) return;
+
+    uint64_t entry = 0;
+    if (!load_zex_program(zex_programs[program_index], entry)) {
+        show_zex_load_error();
+        return;
+    }
+
+    zex_runtime.running = true;
+    zex_runtime.window_open = false;
+    zex_runtime.title[0] = '\0';
+    zex_runtime.message[0] = '\0';
+    mouse_cursor_drawn = false;
+    reinterpret_cast<void (*)()>(static_cast<uintptr_t>(entry))();
+    zex_runtime.running = false;
+    zex_runtime.window_open = false;
+    draw_desktop();
+    draw_mouse_cursor();
+}
+
+static void render_zex_window() {
+    if (mouse_cursor_drawn) restore_mouse_cursor();
+    if (!zex_runtime.window_open) return;
+    draw_zex_window();
+    draw_mouse_cursor();
+}
+
+extern "C" void zex_syscall_dispatch(ZexRegisterFrame* registers) {
+    if (registers == 0 || !zex_runtime.running) return;
+
+    switch (registers->rax) {
+    case 0:
+        zex_runtime.running = false;
+        registers->rip = reinterpret_cast<uintptr_t>(&zex_exit_trampoline);
+        registers->rax = 0;
+        break;
+    case 1:
+        if (copy_zex_string(
+                registers->rdi, zex_runtime.message, sizeof(zex_runtime.message)
+            )) {
+            render_zex_window();
+            registers->rax = 0;
+        } else {
+            registers->rax = static_cast<uint64_t>(-1);
+        }
+        break;
+    case 2:
+        wait_for_zex_key();
+        registers->rax = 0;
+        break;
+    case 5:
+        if (!copy_zex_string(
+                registers->rdi, zex_runtime.title, sizeof(zex_runtime.title)
+            )) {
+            registers->rax = static_cast<uint64_t>(-1);
+            break;
+        }
+        zex_runtime.window_width = registers->rsi < 320
+            ? 320 : static_cast<int>(registers->rsi);
+        zex_runtime.window_height = registers->rdx < 220
+            ? 220 : static_cast<int>(registers->rdx);
+        if (zex_runtime.window_width > static_cast<int>(screen_width) - 80) {
+            zex_runtime.window_width = static_cast<int>(screen_width) - 80;
+        }
+        if (zex_runtime.window_height > static_cast<int>(screen_height) - 100) {
+            zex_runtime.window_height = static_cast<int>(screen_height) - 100;
+        }
+        zex_runtime.window_open = true;
+        mouse_cursor_drawn = false;
+        draw_desktop();
+        draw_zex_window();
+        draw_mouse_cursor();
+        registers->rax = 0;
+        break;
+    default:
+        registers->rax = static_cast<uint64_t>(-1);
+        break;
+    }
 }
 
 static uint16_t pit_read_count() {
@@ -734,6 +1042,9 @@ static void handle_mouse_packet() {
         } else if (start_menu_open && mouse_x >= 52 && mouse_x < 562 &&
                    mouse_y >= screen_bottom - 204 && mouse_y < screen_bottom - 152) {
             shutdown_system();
+        } else if (!start_menu_open && mouse_x >= 38 && mouse_x < 166 &&
+                   mouse_y >= 50 && mouse_y < 830) {
+            run_zex_program(static_cast<uint32_t>((mouse_y - 50) / 156));
         } else if (mouse_x < 84 && mouse_y >= screen_bottom - 76) {
             start_menu_open = !start_menu_open;
             refresh_start_menu();
@@ -773,6 +1084,7 @@ extern "C" __attribute__((noreturn)) void kernel_main(
     mouse_cursor_drawn = false;
     keyboard_extended = false;
     menu_selection = 0;
+    install_zex_syscall_gate();
     initialize_mouse_cursor();
     draw_loading_screen();
     draw_desktop();

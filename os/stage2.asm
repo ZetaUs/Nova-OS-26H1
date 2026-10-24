@@ -115,7 +115,7 @@ gdt_descriptor:
 
 kernel_dap:
     db 0x10, 0
-    dw 96
+    dw 127
     dw 0
     dw 0x1000
     dd 9

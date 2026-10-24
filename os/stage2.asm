@@ -48,9 +48,9 @@ start:
     mov dword [wallpaper_dap + 12], 0
 .read_wallpaper:
     mov ax, [wallpaper_remaining]
-    cmp ax, 127
+    cmp ax, 64
     jbe .wallpaper_count_ready
-    mov ax, 127
+    mov ax, 64
 .wallpaper_count_ready:
     mov [wallpaper_chunk], ax
     mov [wallpaper_dap + 2], ax

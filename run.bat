@@ -3,4 +3,4 @@ setlocal
 call "%~dp0\os\build.bat"
 if errorlevel 1 exit /b 1
 
-"%~dp0..\Program\qemu\qemu-system-x86_64.exe" -drive file="%~dp0\os\build\nova-os-26h2.img",format=raw -m 128M -boot c -vga std -no-shutdown
+"%~dp0Program\qemu\qemu-system-x86_64.exe" -drive file="%~dp0os\build\nova-os-26h2.img",format=raw -m 128M -boot c -vga std -device isa-debug-exit,iobase=0xf4,iosize=0x04

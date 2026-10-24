@@ -30,9 +30,9 @@ static uint8_t mouse_buttons;
 static bool mouse_cursor_drawn;
 static bool keyboard_extended;
 static uint8_t menu_selection;
-static uint32_t mouse_cursor_background[24 * 36];
-static uint8_t mouse_cursor_coverage[24 * 36];
-static uint8_t mouse_cursor_shade[24 * 36];
+static uint32_t mouse_cursor_background[MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT];
+static uint8_t mouse_cursor_coverage[MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT];
+static uint8_t mouse_cursor_shade[MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT];
 static const uintptr_t backbuffer_address = 0x01000000;
 
 static inline void copy_to_framebuffer(
@@ -577,13 +577,33 @@ static void draw_loading_screen() {
 
     const int center_x = static_cast<int>(screen_width / 2);
     const int center_y = static_cast<int>(screen_height / 2);
-    draw_logo(center_x - 160, center_y - 230, 320);
-    draw_text("Nova", center_x - 108, center_y + 110, 3, 0xFFFFFF);
-    draw_text("26H2", center_x - 40, center_y + 182, 1, 0x92CFF2);
-    draw_text("正在启动", center_x - 96, center_y + 226, 1, 0xCBD5E1);
+    draw_logo(center_x - 160, center_y - 190, 320);
 
     const int progress_x = center_x - 180;
-    const int progress_y = center_y + 270;
+    const int progress_y = center_y + 150;
+    fill_rect(progress_x, progress_y, 360, 8, 0x31506C);
+    fill_rect(progress_x + 2, progress_y + 2, 356, 4, 0x102B45);
+    present_backbuffer();
+
+    for (int progress = 0; progress <= 100; progress += 5) {
+        const int progress_width = progress * 356 / 100;
+        fill_rect(progress_x + 2, progress_y + 2, progress_width, 4, 0x36BDF0);
+        present_rect(progress_x + 2, progress_y + 2, progress_width, 4);
+        wait_pit_ticks(1);
+    }
+}
+
+static void draw_shutdown_screen() {
+    render_target = reinterpret_cast<uint32_t*>(backbuffer_address);
+    fill_rect(0, 0, static_cast<int>(screen_width), static_cast<int>(screen_height), 0x07172A);
+
+    const int center_x = static_cast<int>(screen_width / 2);
+    const int center_y = static_cast<int>(screen_height / 2);
+    draw_logo(center_x - 120, center_y - 190, 240);
+    draw_text("正在关机", center_x - 48, center_y + 76, 1, 0xCBD5E1);
+
+    const int progress_x = center_x - 180;
+    const int progress_y = center_y + 128;
     fill_rect(progress_x, progress_y, 360, 8, 0x31506C);
     fill_rect(progress_x + 2, progress_y + 2, 356, 4, 0x102B45);
     present_backbuffer();
@@ -603,6 +623,11 @@ static __attribute__((noreturn)) void restart_system() {
 }
 
 static __attribute__((noreturn)) void shutdown_system() {
+    draw_shutdown_screen();
+    fill_rect(0, 0, static_cast<int>(screen_width), static_cast<int>(screen_height), 0);
+    present_backbuffer();
+    wait_pit_ticks(2);
+
     out32(0x00F4, 0x10);
     out16(0x0604, 0x3400);
     out16(0xB004, 0x2000);

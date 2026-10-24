@@ -1,36 +1,36 @@
-[bits 32]
+[bits 64]
 [org 0x400000]
-BSS_SIZE equ 1024
+BSS_SIZE  equ 2048
 
 zex_header:
     dw 0x575A
-    dw 0x0001
-    dd entry
-    dd code_end - code_start
-    dd data_end - data_start
-    dd BSS_SIZE
-    dd 0
+    dw 0x0002
+    dq entry
+    dq code_end - code_start
+    dq data_end - data_start
+    dq BSS_SIZE
 
 code_start:
 entry:
-    mov eax,5
-    mov ebx,win_title_np
-    mov ecx,600
-    mov edx,420
-    int 0x80
+    mov rax, 5
+    mov rdi, win_title_np
+    mov rsi, 600
+    mov rdx, 420
+    syscall
 
-    mov eax,1
-    mov ebx,msg_np
-    int 0x80
+    mov rax, 1
+    mov rdi, msg_np
+    syscall
 
-    mov eax,2
-    int 0x80
+    mov rax, 2
+    syscall
 
-    mov eax,0
-    int 0x80
+    mov rax, 0
+    mov rdi, 0
+    syscall
 code_end:
 
 data_start:
 win_title_np db "记事本",0
-msg_np db "[记事本] 编辑文本，保存为 .ztxt / .asm / .cfg",0
+msg_np       db "[记事本] 编辑文本，保存为 .ztxt / .asm / .cfg",0
 data_end:

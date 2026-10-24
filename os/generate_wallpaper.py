@@ -4,8 +4,8 @@ import zlib
 from pathlib import Path
 
 
-OUTPUT_WIDTH = 480
-OUTPUT_HEIGHT = 270
+OUTPUT_WIDTH = 672
+OUTPUT_HEIGHT = 378
 
 
 def decode_png(path):

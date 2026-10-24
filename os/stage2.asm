@@ -42,7 +42,7 @@ start:
     int 0x13
     jc kernel_error
 
-    mov word [wallpaper_remaining], 507
+    mov word [wallpaper_remaining], 993
     mov word [wallpaper_dap + 6], 0x2000
     mov dword [wallpaper_dap + 8], 105
     mov dword [wallpaper_dap + 12], 0
@@ -145,7 +145,7 @@ protected_mode_entry:
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov esp, 0x90000
+    mov esp, 0x120000
 
     ; Configure the Bochs/QEMU VBE extension for the 1920x1080x32 desktop.
     mov dx, 0x01CE
@@ -194,22 +194,22 @@ protected_mode_entry:
     out dx, ax
 
     ; Identity-map the first 4 GiB so the high-address VBE framebuffer is reachable.
-    mov edi, 0x70000
+    mov edi, 0x100000
     xor eax, eax
     mov ecx, 6144
     rep stosd
-    mov dword [0x70000], 0x71003
+    mov dword [0x100000], 0x101003
     mov ecx, 0
 .map_pdpt:
     mov eax, ecx
     shl eax, 12
-    add eax, 0x72003
-    mov [0x71000 + ecx * 8], eax
+    add eax, 0x102003
+    mov [0x101000 + ecx * 8], eax
     inc ecx
     cmp ecx, 4
     jne .map_pdpt
 
-    mov edi, 0x72000
+    mov edi, 0x102000
     xor ebx, ebx
     mov ecx, 0
 .map_page:
@@ -226,7 +226,7 @@ protected_mode_entry:
     mov eax, cr4
     or eax, 0x20
     mov cr4, eax
-    mov eax, 0x70000
+    mov eax, 0x100000
     mov cr3, eax
     mov ecx, 0xC0000080
     rdmsr
@@ -259,7 +259,7 @@ long_mode_entry:
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov rsp, 0x90008
+    mov rsp, 0x120008
     cld
 
     mov ecx, [rel framebuffer_base]

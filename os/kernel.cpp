@@ -420,10 +420,10 @@ static void draw_wallpaper() {
     const uint32_t row_stride = screen_pitch / 4;
     for (uint32_t y = 0; y < screen_height; ++y) {
         uint32_t* row = render_target + y * row_stride;
-        const uint32_t source_y = y >> 2;
+        const uint32_t source_y = y * 7 / 20;
         for (uint32_t x = 0; x < screen_width; ++x) {
-            const uint32_t source_x = x >> 2;
-            const uint16_t color = wallpaper[source_y * 480 + source_x];
+            const uint32_t source_x = x * 7 / 20;
+            const uint16_t color = wallpaper[source_y * 672 + source_x];
             const uint32_t red5 = (color >> 11) & 31;
             const uint32_t green6 = (color >> 5) & 63;
             const uint32_t blue5 = color & 31;

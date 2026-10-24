@@ -223,6 +223,25 @@ protected_mode_entry:
     cmp ecx, 2048
     jne .map_page
 
+    ; Keep the linear framebuffer uncached while normal RAM remains write-back.
+    mov eax, [framebuffer_base]
+    mov edx, eax
+    and edx, 0x001FFFFF
+    add edx, 0x007E9000
+    add edx, 0x001FFFFF
+    shr edx, 21
+    shr eax, 21
+    shl eax, 3
+    add eax, 0x102000
+    mov edi, eax
+.mark_framebuffer:
+    mov eax, [edi]
+    or eax, 0x18
+    mov [edi], eax
+    add edi, 8
+    dec edx
+    jnz .mark_framebuffer
+
     mov eax, cr4
     or eax, 0x20
     mov cr4, eax

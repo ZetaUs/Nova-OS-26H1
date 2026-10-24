@@ -5,7 +5,7 @@ extern kernel_main
 
 section .text
 kernel_entry:
-    mov rsp, 0x90008
+    mov rsp, 0x120008
     sub rsp, 40
     mov dword [rsp + 32], 32
     call kernel_main

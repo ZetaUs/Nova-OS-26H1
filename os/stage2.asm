@@ -48,9 +48,9 @@ start:
     mov dword [wallpaper_dap + 12], 0
 .read_wallpaper:
     mov ax, [wallpaper_remaining]
-    cmp ax, 127
+    cmp ax, 64
     jbe .wallpaper_count_ready
-    mov ax, 127
+    mov ax, 64
 .wallpaper_count_ready:
     mov [wallpaper_chunk], ax
     mov [wallpaper_dap + 2], ax
@@ -222,6 +222,25 @@ protected_mode_entry:
     inc ecx
     cmp ecx, 2048
     jne .map_page
+
+    ; Keep the linear framebuffer uncached while normal RAM remains write-back.
+    mov eax, [framebuffer_base]
+    mov edx, eax
+    and edx, 0x001FFFFF
+    add edx, 0x007E9000
+    add edx, 0x001FFFFF
+    shr edx, 21
+    shr eax, 21
+    shl eax, 3
+    add eax, 0x102000
+    mov edi, eax
+.mark_framebuffer:
+    mov eax, [edi]
+    or eax, 0x18
+    mov [edi], eax
+    add edi, 8
+    dec edx
+    jnz .mark_framebuffer
 
     mov eax, cr4
     or eax, 0x20
